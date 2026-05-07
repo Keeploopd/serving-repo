@@ -105,7 +105,7 @@ async function init() {
 
   async function sendHeartbeat() {
     try {
-      await fetch("https://api.keeploopd.com/heartbeat", {
+      const hb = await fetch("https://api.keeploopd.com/heartbeat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -117,7 +117,7 @@ async function init() {
           timestamp: Date.now()
         })
       });
-      
+  
       console.log("heartbeat status", hb.status, await hb.text());
     } catch (err) {
       console.error("Heartbeat failed:", err);
@@ -134,15 +134,17 @@ async function init() {
           }
         }
       );
-
+  
       console.log("active-drafters status", res.status);
-
+  
       const data = await res.json();
+      console.log("active-drafters data", data);
+  
       const banner = document.getElementById("banner");
-
+  
       if (data.count >= 1) {
         banner.style.display = "block";
-        banner.textContent = `${data.count} people are currently drafting replies`;
+        banner.textContent = `${data.count} active drafter(s) detected`;
       } else {
         banner.style.display = "none";
         banner.textContent = "";
