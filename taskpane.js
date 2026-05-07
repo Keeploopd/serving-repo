@@ -23,6 +23,47 @@ async function hashEmail(email) {
   return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function signInAndCallBackend() {
+  Office.context.ui.displayDialogAsync(
+    "https://co-draft.keeploopd.com/auth.html",
+    { height: 60, width: 40 },
+    (result) => {
+      if (result.status !== Office.AsyncResultStatus.Succeeded) {
+        console.error("Dialog failed to open", result.error);
+        return;
+      }
+
+      const dialog = result.value;
+
+      dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
+        try {
+          const payload = JSON.parse(arg.message);
+          dialog.close();
+
+          if (payload.error) {
+            console.error("Auth error from dialog", payload);
+            return;
+          }
+
+          console.log("Access token received", payload.accessToken);
+
+          const response = await fetch("https://api.keeploopd.com/api/auth/test", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${payload.accessToken}`
+            }
+          });
+
+          const text = await response.text();
+          console.log("Backend response", response.status, text);
+        } catch (err) {
+          console.error("Taskpane token handling error", err);
+        }
+      });
+    }
+  );
+}
+
 async function getAccessToken() {
   await msalInstance.initialize();
   
