@@ -116,7 +116,9 @@ async function init() {
           userId,
           timestamp: Date.now()
         })
-      });
+      }
+      console.log("heartbeat status", hb.status, await hb.text());
+      );
     } catch (err) {
       console.error("Heartbeat failed:", err);
     }
@@ -132,6 +134,11 @@ async function init() {
           }
         }
       );
+
+      console.log("active-drafters status", res.status);
+
+      const data = await res.json();
+      console.log("active-drafters data", data);
 
       const data = await res.json();
       const banner = document.getElementById("banner");
