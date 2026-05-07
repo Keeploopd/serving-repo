@@ -28,8 +28,19 @@
       }));
 
     } catch (err) {
+      console.error("MSAL error", {
+        errorCode: err.errorCode,
+        errorMessage: err.errorMessage,
+        subError: err.subError,
+        correlationId: err.correlationId
+      });
+  
       Office.context.ui.messageParent(JSON.stringify({
-        error: err.message
+        error: true,
+        errorCode: err.errorCode,
+        errorMessage: err.errorMessage,
+        subError: err.subError,
+        correlationId: err.correlationId
       }));
     }
   }
