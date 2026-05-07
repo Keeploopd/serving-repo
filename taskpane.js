@@ -1,7 +1,7 @@
 // MSAL configuration
 const msalConfig = {
   auth: {
-    clientId: "8f6049aa-9902-4e66-94bf-11fb8a7f2814",
+    clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
     authority: "https://login.microsoftonline.com/5904ae0b-47e9-4b06-843e-60769342a32b",
     redirectUri: "https://co-draft.keeploopd.com/taskpane.html"
   },
