@@ -135,20 +135,29 @@ async function init() {
         }
       );
   
-      console.log("active-drafters status", res.status);
-  
       const data = await res.json();
-      console.log("active-drafters data", data);
-  
       const banner = document.getElementById("banner");
   
       if (data.count >= 1) {
         banner.style.display = "block";
         banner.textContent = `${data.count} active drafter(s) detected`;
+  
+        // ✅ ADD THIS
+        Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
+          type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+          message: `${data.count} active drafter(s) detected`,
+          icon: "Icon.16x16",
+          persistent: false
+        });
+  
       } else {
         banner.style.display = "none";
         banner.textContent = "";
+  
+        // ✅ REMOVE notification when no one else is drafting
+        Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
       }
+  
     } catch (err) {
       console.error("Banner update failed:", err);
     }
