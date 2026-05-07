@@ -16,6 +16,9 @@ const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
+let currentToken = null;
+let monitoringStarted = false;
+
 async function hashEmail(email) {
   const encoded = new TextEncoder().encode(email.toLowerCase().trim());
   const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
@@ -30,6 +33,7 @@ async function signInAndCallBackend() {
     (result) => {
       if (result.status !== Office.AsyncResultStatus.Succeeded) {
         console.error("Dialog failed to open", result.error);
+        document.getElementById("status").textContent = "Could not open authentication dialog.";
         return;
       }
 
@@ -47,27 +51,30 @@ async function signInAndCallBackend() {
             return;
           }
 
-          console.log("Access token received", payload.accessToken);
-
           const response = await fetch("https://api.keeploopd.com/api/auth/test", {
             headers: {
               Authorization: `Bearer ${payload.accessToken}`
             }
           });
-          
+
           const text = await response.text();
-          
           console.log("Backend response", response.status, text);
-          
-          if (response.ok) {
-            document.getElementById("status").textContent = "Authenticated successfully";
-            const banner = document.getElementById("banner");
-            banner.style.display = "block";
-            banner.textContent = "Backend token validation succeeded.";
-          } else {
+
+          if (!response.ok) {
             document.getElementById("status").textContent =
               `Backend auth failed: ${response.status}`;
+            return;
           }
+
+          currentToken = payload.accessToken;
+
+          document.getElementById("status").textContent = "Authenticated successfully";
+
+          const banner = document.getElementById("banner");
+          banner.style.display = "block";
+          banner.textContent = "Backend token validation succeeded.";
+
+          await init();
 
         } catch (err) {
           console.error("Taskpane token handling error", err);
@@ -79,68 +86,30 @@ async function signInAndCallBackend() {
   );
 }
 
-async function getAccessToken() {
-  await msalInstance.initialize();
-  
-  // Handle redirect response first
-  await msalInstance.handleRedirectPromise();
-  
-  const accounts = msalInstance.getAllAccounts();
+async function init() {
+  if (monitoringStarted) return;
 
-  if (accounts.length > 0) {
-    try {
-      // Try silent token acquisition first
-      const result = await msalInstance.acquireTokenSilent({
-        ...apiRequest,
-        account: accounts[0]
-      });
-      return result.accessToken;
-    } catch (err) {
-      // Silent failed, fall through to popup
-      console.warn("Silent token acquisition failed, trying popup:", err);
-    }
+  if (!currentToken) {
+    document.getElementById("status").textContent = "Please authenticate first.";
+    return;
   }
 
-  // Popup login
-  const result = await msalInstance.loginPopup(apiRequest);
-  return result.accessToken;
-}
+  monitoringStarted = true;
 
-async function init() {
   const item = Office.context.mailbox.item;
   const conversationId = item.conversationId;
   const rawEmail = Office.context.mailbox.userProfile.emailAddress;
   const userId = await hashEmail(rawEmail);
 
-  document.getElementById("status").innerText = "Authenticating...";
-
-  let token;
-  try {
-    token = await getAccessToken();
-    document.getElementById("status").innerText = "Monitoring active drafters...";
-  } catch (err) {
-    document.getElementById("status").innerText = "Authentication failed. Please reload.";
-    console.error("Auth error:", err);
-    return;
-  }
+  document.getElementById("status").textContent = "Monitoring active drafters...";
 
   async function sendHeartbeat() {
     try {
-      // Refresh token silently on each heartbeat
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length > 0) {
-        const result = await msalInstance.acquireTokenSilent({
-          ...apiRequest,
-          account: accounts[0]
-        });
-        token = result.accessToken;
-      }
-
       await fetch("https://api.keeploopd.com/heartbeat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${currentToken}`
         },
         body: JSON.stringify({
           conversationId,
@@ -155,37 +124,36 @@ async function init() {
 
   async function updateBanner() {
     try {
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length > 0) {
-        const result = await msalInstance.acquireTokenSilent({
-          ...apiRequest,
-          account: accounts[0]
-        });
-        token = result.accessToken;
-      }
-
       const res = await fetch(
-        `https://api.keeploopd.com/active-drafters?conversationId=${conversationId}`,
-        { headers: { "Authorization": `Bearer ${token}` } }
+        `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${currentToken}`
+          }
+        }
       );
+
       const data = await res.json();
       const banner = document.getElementById("banner");
+
       if (data.count > 1) {
         banner.style.display = "block";
-        banner.innerText = `${data.count} people are currently drafting replies`;
+        banner.textContent = `${data.count} people are currently drafting replies`;
       } else {
         banner.style.display = "none";
-        banner.innerText = "";
+        banner.textContent = "";
       }
     } catch (err) {
       console.error("Banner update failed:", err);
     }
   }
 
-  sendHeartbeat();
-  updateBanner();
+  await sendHeartbeat();
+  await updateBanner();
+
   setInterval(sendHeartbeat, 30000);
   setInterval(updateBanner, 30000);
 }
 
-//Office.onReady(() => init());
+// Keep this disabled for now.
+// Office.onReady(() => init());
