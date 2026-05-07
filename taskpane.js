@@ -12,8 +12,8 @@ const msalConfig = {
 
 const msalInstance = new msal.PublicClientApplication(msalConfig);
 
-const loginRequest = {
-  scopes: ["openid", "profile", "User.Read"]
+const apiRequest = {
+  scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
 async function hashEmail(email) {
@@ -50,16 +50,29 @@ async function signInAndCallBackend() {
           console.log("Access token received", payload.accessToken);
 
           const response = await fetch("https://api.keeploopd.com/api/auth/test", {
-            method: "GET",
             headers: {
               Authorization: `Bearer ${payload.accessToken}`
             }
           });
-
+          
           const text = await response.text();
+          
           console.log("Backend response", response.status, text);
+          
+          if (response.ok) {
+            document.getElementById("status").textContent = "Authenticated successfully";
+            const banner = document.getElementById("banner");
+            banner.style.display = "block";
+            banner.textContent = "Backend token validation succeeded.";
+          } else {
+            document.getElementById("status").textContent =
+              `Backend auth failed: ${response.status}`;
+          }
+
         } catch (err) {
           console.error("Taskpane token handling error", err);
+          document.getElementById("status").textContent =
+            `Taskpane error: ${err.message || err}`;
         }
       });
     }
@@ -78,7 +91,7 @@ async function getAccessToken() {
     try {
       // Try silent token acquisition first
       const result = await msalInstance.acquireTokenSilent({
-        ...loginRequest,
+        ...apiRequest,
         account: accounts[0]
       });
       return result.accessToken;
@@ -89,7 +102,7 @@ async function getAccessToken() {
   }
 
   // Popup login
-  const result = await msalInstance.loginPopup(loginRequest);
+  const result = await msalInstance.loginPopup(apiRequest);
   return result.accessToken;
 }
 
@@ -117,7 +130,7 @@ async function init() {
       const accounts = msalInstance.getAllAccounts();
       if (accounts.length > 0) {
         const result = await msalInstance.acquireTokenSilent({
-          ...loginRequest,
+          ...apiRequest,
           account: accounts[0]
         });
         token = result.accessToken;
@@ -145,7 +158,7 @@ async function init() {
       const accounts = msalInstance.getAllAccounts();
       if (accounts.length > 0) {
         const result = await msalInstance.acquireTokenSilent({
-          ...loginRequest,
+          ...apiRequest,
           account: accounts[0]
         });
         token = result.accessToken;
@@ -175,4 +188,4 @@ async function init() {
   setInterval(updateBanner, 30000);
 }
 
-Office.onReady(() => init());
+//Office.onReady(() => init());
