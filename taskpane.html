@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=Edge">
   <title>Co-draft Detector</title>
+
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+
   <style>
     body { font-family: Segoe UI, sans-serif; padding: 16px; margin: 0; }
     #banner {
@@ -20,9 +22,27 @@
     #status { font-size: 12px; color: #888; margin-top: 12px; }
   </style>
 </head>
+
 <body>
+  <button id="signin">Test auth</button>
+
   <div id="banner"></div>
-  <div id="status">Connecting...</div>
+  <div id="status">Ready</div>
+
   <script src="taskpane.js"></script>
+
+  <script>
+    Office.onReady(() => {
+      const btn = document.getElementById("signin");
+
+      if (btn) {
+        btn.addEventListener("click", () => {
+          signInAndCallBackend();
+        });
+      } else {
+        console.error("Signin button not found");
+      }
+    });
+  </script>
 </body>
 </html>
