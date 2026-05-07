@@ -5,6 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=Edge">
   <title>Co-draft Detector</title>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
   <style>
     body { font-family: Segoe UI, sans-serif; padding: 16px; margin: 0; }
     #banner {
@@ -14,7 +15,7 @@
       border-radius: 4px;
       font-size: 14px;
       min-height: 36px;
-      display: none;        /* hidden when no active drafters */
+      display: none;
     }
     #status { font-size: 12px; color: #888; margin-top: 12px; }
   </style>
@@ -22,13 +23,6 @@
 <body>
   <div id="banner"></div>
   <div id="status">Connecting...</div>
-
-  <script>
-    Office.onReady(() => {
-      document.getElementById("status").innerText = "Monitoring active drafters...";
-      // taskpane.js init() will fire after Office is ready
-    });
-  </script>
   <script src="taskpane.js"></script>
 </body>
 </html>
