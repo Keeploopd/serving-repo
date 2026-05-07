@@ -40,8 +40,10 @@ async function signInAndCallBackend() {
           const payload = JSON.parse(arg.message);
           dialog.close();
 
-          if (payload.error) {
-            console.error("Auth error from dialog", payload);
+          if (!payload.success) {
+            console.error("Auth failed", payload);
+            document.getElementById("status").textContent =
+              `Authentication failed: ${payload.errorCode || ""} ${payload.errorMessage || ""}`;
             return;
           }
 
