@@ -10,41 +10,63 @@
     auth: {
       clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
       authority: "https://login.microsoftonline.com/5904ae0b-47e9-4b06-843e-60769342a32b",
-      redirectUri: "https://co-draft.keeploopd.com/auth.html"
+      redirectUri: "https://co-draft.keeploopd.com/auth.html",
+      navigateToLoginRequestUrl: false
+    },
+    cache: {
+      cacheLocation: "sessionStorage"
     }
   };
-
+  
+  const scopes = [
+    "api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"
+  ];
+  
   const msalInstance = new msal.PublicClientApplication(msalConfig);
-
-  msalInstance.handleRedirectPromise()
-    .then(result => {
-      if (result) {
-        Office.context.ui.messageParent(JSON.stringify({
+  
+  function sendToTaskpane(payload) {
+    Office.context.ui.messageParent(JSON.stringify(payload));
+  }
+  
+  Office.onReady(async () => {
+    try {
+      const result = await msalInstance.handleRedirectPromise();
+  
+      if (result && result.accessToken) {
+        sendToTaskpane({
+          success: true,
           accessToken: result.accessToken
-        }));
-      } else {
-        msalInstance.loginRedirect({
-          scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
         });
+        return;
       }
-    })
-    .catch(err => {
-      console.error("MSAL redirect error", {
+  
+      const accounts = msalInstance.getAllAccounts();
+  
+      if (accounts.length > 0) {
+        const silentResult = await msalInstance.acquireTokenSilent({
+          account: accounts[0],
+          scopes
+        });
+  
+        sendToTaskpane({
+          success: true,
+          accessToken: silentResult.accessToken
+        });
+        return;
+      }
+  
+      await msalInstance.loginRedirect({ scopes });
+  
+    } catch (err) {
+      sendToTaskpane({
+        success: false,
         errorCode: err.errorCode,
-        errorMessage: err.errorMessage,
+        errorMessage: err.errorMessage || err.message,
         subError: err.subError,
         correlationId: err.correlationId
       });
-  
-      Office.context.ui.messageParent(JSON.stringify({
-        error: true,
-        errorCode: err.errorCode,
-        errorMessage: err.errorMessage,
-        subError: err.subError,
-        correlationId: err.correlationId
-      }));
-    });
-
+    }
+  });
 </script>
 </body>
 </html>
