@@ -1,3 +1,21 @@
+// MSAL configuration
+const msalConfig = {
+  auth: {
+    clientId: "your-azure-client-id",
+    authority: "https://login.microsoftonline.com/your-tenant-id",
+    redirectUri: "https://gitsubdomain.mydomain.com/taskpane.html"
+  },
+  cache: {
+    cacheLocation: "sessionStorage"
+  }
+};
+
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+const loginRequest = {
+  scopes: ["openid", "profile", "User.Read"]
+};
+
 async function hashEmail(email) {
   const encoded = new TextEncoder().encode(email.toLowerCase().trim());
   const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
@@ -6,18 +24,30 @@ async function hashEmail(email) {
 }
 
 async function getAccessToken() {
-  return new Promise((resolve, reject) => {
-    Office.auth.getAccessToken(
-      { allowSignInPrompt: true, allowConsentPrompt: true },
-      (result) => {
-        if (result.status === "succeeded") {
-          resolve(result.value);
-        } else {
-          reject(new Error(result.error.message));
-        }
-      }
-    );
-  });
+  await msalInstance.initialize();
+  
+  // Handle redirect response first
+  await msalInstance.handleRedirectPromise();
+  
+  const accounts = msalInstance.getAllAccounts();
+
+  if (accounts.length > 0) {
+    try {
+      // Try silent token acquisition first
+      const result = await msalInstance.acquireTokenSilent({
+        ...loginRequest,
+        account: accounts[0]
+      });
+      return result.accessToken;
+    } catch (err) {
+      // Silent failed, fall through to popup
+      console.warn("Silent token acquisition failed, trying popup:", err);
+    }
+  }
+
+  // Popup login
+  const result = await msalInstance.loginPopup(loginRequest);
+  return result.accessToken;
 }
 
 async function init() {
@@ -26,16 +56,41 @@ async function init() {
   const rawEmail = Office.context.mailbox.userProfile.emailAddress;
   const userId = await hashEmail(rawEmail);
 
+  document.getElementById("status").innerText = "Authenticating...";
+
+  let token;
+  try {
+    token = await getAccessToken();
+    document.getElementById("status").innerText = "Monitoring active drafters...";
+  } catch (err) {
+    document.getElementById("status").innerText = "Authentication failed. Please reload.";
+    console.error("Auth error:", err);
+    return;
+  }
+
   async function sendHeartbeat() {
     try {
-      const token = await getAccessToken();
-      await fetch("https://api.keeploopd.com/heartbeat", {
+      // Refresh token silently on each heartbeat
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length > 0) {
+        const result = await msalInstance.acquireTokenSilent({
+          ...loginRequest,
+          account: accounts[0]
+        });
+        token = result.accessToken;
+      }
+
+      await fetch("https://api.your-domain.com/heartbeat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`    // token sent in header
+          "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ conversationId, userId, timestamp: Date.now() })
+        body: JSON.stringify({
+          conversationId,
+          userId,
+          timestamp: Date.now()
+        })
       });
     } catch (err) {
       console.error("Heartbeat failed:", err);
@@ -44,9 +99,17 @@ async function init() {
 
   async function updateBanner() {
     try {
-      const token = await getAccessToken();
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length > 0) {
+        const result = await msalInstance.acquireTokenSilent({
+          ...loginRequest,
+          account: accounts[0]
+        });
+        token = result.accessToken;
+      }
+
       const res = await fetch(
-        `https://api.keeploopd.com/active-drafters?conversationId=${conversationId}`,
+        `https://api.your-domain.com/active-drafters?conversationId=${conversationId}`,
         { headers: { "Authorization": `Bearer ${token}` } }
       );
       const data = await res.json();
