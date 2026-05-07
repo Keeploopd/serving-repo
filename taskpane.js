@@ -80,7 +80,7 @@ async function init() {
         token = result.accessToken;
       }
 
-      await fetch("https://api.your-domain.com/heartbeat", {
+      await fetch("https://api.keeploopd.com/heartbeat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -109,7 +109,7 @@ async function init() {
       }
 
       const res = await fetch(
-        `https://api.your-domain.com/active-drafters?conversationId=${conversationId}`,
+        `https://api.keeploopd.com/active-drafters?conversationId=${conversationId}`,
         { headers: { "Authorization": `Bearer ${token}` } }
       );
       const data = await res.json();
