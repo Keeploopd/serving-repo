@@ -136,7 +136,7 @@ async function init() {
       const data = await res.json();
       const banner = document.getElementById("banner");
 
-      if (data.count > 1) {
+      if (data.count >= 1) {
         banner.style.display = "block";
         banner.textContent = `${data.count} people are currently drafting replies`;
       } else {
