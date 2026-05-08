@@ -67,13 +67,8 @@ async function signInAndCallBackend() {
           }
 
           currentToken = payload.accessToken;
-
+          document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
-
-          const banner = document.getElementById("banner");
-          banner.style.display = "block";
-          banner.textContent = "Backend token validation succeeded.";
-
           await init();
 
         } catch (err) {
@@ -184,5 +179,36 @@ async function updateBanner() {
   setInterval(updateBanner, 5000);
 }
 
-// Keep this disabled for now.
-// Office.onReady(() => init());
+async function trySilentAuth() {
+  try {
+    await msalInstance.initialize();
+
+    const accounts = msalInstance.getAllAccounts();
+    if (!accounts.length) return null;
+
+    const result = await msalInstance.acquireTokenSilent({
+      ...apiRequest,
+      account: accounts[0]
+    });
+
+    return result.accessToken;
+  } catch (err) {
+    console.warn("Silent auth unavailable", err);
+    return null;
+  }
+}
+
+Office.onReady(async () => {
+  document.getElementById("signin").addEventListener("click", signInAndCallBackend);
+
+  const silentToken = await trySilentAuth();
+
+  if (silentToken) {
+    currentToken = silentToken;
+    document.getElementById("signin").style.display = "none";
+    await init();
+  } else {
+    document.getElementById("status").textContent = "Sign in required.";
+    document.getElementById("signin").style.display = "block";
+  }
+});
