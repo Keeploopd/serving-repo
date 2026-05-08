@@ -132,7 +132,7 @@ function updateNotification(count) {
   lastNotificationCount = count;
 
   Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus", () => {
-    if (count > 1) {
+    if (count >= 1) {
       Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
         type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
         message: `${count} people are currently drafting replies`,
