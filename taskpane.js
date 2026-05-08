@@ -97,7 +97,7 @@ async function init() {
   monitoringStarted = true;
 
   const item = Office.context.mailbox.item;
-  const conversationId = item.conversationId;
+  const conversationId = item.conversationId.slice(-32);
   const rawEmail = Office.context.mailbox.userProfile.emailAddress;
   const userId = await hashEmail(rawEmail);
 
