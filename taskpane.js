@@ -124,50 +124,53 @@ async function init() {
     }
   }
 
-  async function updateBanner() {
-    try {
-      const res = await fetch(
-        `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${currentToken}`
-          }
-        }
-      );
-  
-      const data = await res.json();
-      const banner = document.getElementById("banner");
-  
-      if (data.count >= 1) {
-        banner.style.display = "block";
-        banner.textContent = `${data.count} active drafter(s) detected`;
-  
-        // ✅ ADD THIS
-        Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
-          type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-          message: `${data.count} active drafter(s) detected`,
-          icon: "Icon.16x16",
-          persistent: false
-        });
-  
-      } else {
-        banner.style.display = "none";
-        banner.textContent = "";
-  
-        // ✅ REMOVE notification when no one else is drafting
-        Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
-      }
-  
-    } catch (err) {
-      console.error("Banner update failed:", err);
-    }
+function updateNotification(count) {
+  if (count >= 1) {
+    Office.context.mailbox.item.notificationMessages.replaceAsync("codraftStatus", {
+      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+      message: `${count} people are currently drafting replies`,
+      icon: "Icon.16x16",
+      persistent: false
+    });
+  } else {
+    Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
   }
+}
+
+async function updateBanner() {
+  try {
+    const res = await fetch(
+      `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${currentToken}`
+        }
+      }
+    );
+
+    const data = await res.json();
+    const banner = document.getElementById("banner");
+
+    if (data.count >= 1) {
+      banner.style.display = "block";
+      banner.textContent = `${data.count} active drafter(s) detected`;
+    } else {
+      banner.style.display = "none";
+      banner.textContent = "";
+    }
+
+    updateNotification(data.count);
+
+  } catch (err) {
+    console.error("Banner update failed:", err);
+  }
+}
 
   await sendHeartbeat();
   await updateBanner();
 
-  setInterval(sendHeartbeat, 30000);
-  setInterval(updateBanner, 30000);
+  setInterval(sendHeartbeat, 15000);
+  setInterval(updateBanner, 15000);
 }
 
 // Keep this disabled for now.
