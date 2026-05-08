@@ -124,17 +124,23 @@ async function init() {
     }
   }
 
+let lastNotificationCount = null;
+  
 function updateNotification(count) {
-  if (count >= 1) {
-    Office.context.mailbox.item.notificationMessages.replaceAsync("codraftStatus", {
-      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: `${count} people are currently drafting replies`,
-      icon: "Icon.16x16",
-      persistent: false
-    });
-  } else {
-    Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
-  }
+  if (count === lastNotificationCount) return;
+
+  lastNotificationCount = count;
+
+  Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus", () => {
+    if (count > 1) {
+      Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
+        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+        message: `${count} people are currently drafting replies`,
+        icon: "Icon.16x16",
+        persistent: false
+      });
+    }
+  });
 }
 
 async function updateBanner() {
@@ -147,6 +153,11 @@ async function updateBanner() {
         }
       }
     );
+
+    if (!res.ok) {
+      console.error("active-drafters failed", res.status, await res.text());
+      return;
+    }
 
     const data = await res.json();
     const banner = document.getElementById("banner");
@@ -169,8 +180,8 @@ async function updateBanner() {
   await sendHeartbeat();
   await updateBanner();
 
-  setInterval(sendHeartbeat, 15000);
-  setInterval(updateBanner, 15000);
+  setInterval(sendHeartbeat, 10000);
+  setInterval(updateBanner, 5000);
 }
 
 // Keep this disabled for now.
