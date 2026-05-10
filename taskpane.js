@@ -120,6 +120,35 @@ function updateNotification(count) {
   });
 }
 
+// Convo ID testing begin
+async function getConversationKey() {
+  const item = Office.context.mailbox.item;
+
+  const rawConversationId = item.conversationId || "";
+  const subject = (item.subject || "")
+    .toLowerCase()
+    .replace(/^(re|fw|fwd):\s*/i, "")
+    .trim();
+
+  // Testing with suffix tail af "AQ".
+  const markerIndex = rawConversationId.lastIndexOf("AQ");
+  const sharedConversationPart =
+    markerIndex >= 0 ? rawConversationId.slice(markerIndex) : rawConversationId.slice(-24);
+
+  const keyMaterial = `${sharedConversationPart}|${subject}`;
+
+  return await sha256(keyMaterial);
+}
+
+async function sha256(value) {
+  const encoded = new TextEncoder().encode(value);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+// Convo ID testing end
+
 async function init() {
   if (!currentToken) {
     document.getElementById("status").textContent = "Please authenticate first.";
@@ -127,7 +156,8 @@ async function init() {
   }
 
   const item = Office.context.mailbox.item;
-  const conversationId = item.conversationId.slice(-24);
+  //const conversationId = item.conversationId.slice(-24);
+  const conversationId = await getConversationKey();
   const rawEmail = Office.context.mailbox.userProfile.emailAddress;
   const userId = await hashEmail(rawEmail);
 
