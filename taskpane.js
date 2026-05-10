@@ -85,7 +85,6 @@ async function signInAndCallBackend() {
 let activeConversationId = null;
 let heartbeatInterval = null;
 let bannerInterval = null;
-let monitoringStarted = false;
 let lastNotificationCount = null;
 
 function stopMonitoring() {
