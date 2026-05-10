@@ -28,8 +28,6 @@ async function hashEmail(email) {
 
 async function signInAndCallBackend() {
   
-  console.log("Test auth clicked");
-  
   Office.context.ui.displayDialogAsync(
     "https://co-draft.keeploopd.com/auth.html",
     { height: 60, width: 40 },
