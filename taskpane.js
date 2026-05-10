@@ -1,4 +1,3 @@
-// MSAL configuration
 const msalConfig = {
   auth: {
     clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
@@ -125,8 +124,6 @@ function getSubjectText(item) {
   if (typeof item.subject === "string") {
     return item.subject;
   }
-
-  // Compose mode often exposes subject via getAsync
   return "";
 }
 
@@ -297,4 +294,12 @@ Office.onReady(async () => {
     document.getElementById("status").textContent = "Sign in required.";
     signinButton.style.display = "block";
   }
+
+  window.addEventListener("beforeunload", () => {
+    try {
+      Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
+    } catch (err) {
+      console.warn("Could not clear Co-Draft notification on unload", err);
+    }
+  });
 });
