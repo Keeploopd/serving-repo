@@ -121,16 +121,26 @@ function updateNotification(count) {
 }
 
 // Convo ID testing begin
+function getSubjectText(item) {
+  if (typeof item.subject === "string") {
+    return item.subject;
+  }
+
+  // Compose mode often exposes subject via getAsync
+  return "";
+}
+
 async function getConversationKey() {
   const item = Office.context.mailbox.item;
 
   const rawConversationId = item.conversationId || "";
-  const subject = (item.subject || "")
+
+  const subjectText = getSubjectText(item);
+  const subject = subjectText
     .toLowerCase()
     .replace(/^(re|fw|fwd):\s*/i, "")
     .trim();
 
-  // Testing with suffix tail af "AQ".
   const markerIndex = rawConversationId.lastIndexOf("AQ");
   const sharedConversationPart =
     markerIndex >= 0 ? rawConversationId.slice(markerIndex) : rawConversationId.slice(-24);
