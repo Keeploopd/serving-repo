@@ -81,20 +81,66 @@ async function signInAndCallBackend() {
   );
 }
 
-async function init() {
-  if (monitoringStarted) return;
+let activeConversationId = null;
+let heartbeatInterval = null;
+let bannerInterval = null;
+let monitoringStarted = false;
+let lastNotificationCount = null;
 
+function stopMonitoring() {
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  if (bannerInterval) clearInterval(bannerInterval);
+
+  heartbeatInterval = null;
+  bannerInterval = null;
+  monitoringStarted = false;
+  lastNotificationCount = null;
+
+  try {
+    Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus");
+  } catch (err) {
+    console.warn("Could not remove notification", err);
+  }
+}
+
+function updateNotification(count) {
+  if (count === lastNotificationCount) return;
+
+  lastNotificationCount = count;
+
+  Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus", () => {
+    if (count > 1) {
+      Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
+        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+        message: `${count} people are currently drafting replies`,
+        icon: "Icon.16x16",
+        persistent: false
+      });
+    }
+  });
+}
+
+async function init() {
   if (!currentToken) {
     document.getElementById("status").textContent = "Please authenticate first.";
     return;
   }
 
-  monitoringStarted = true;
-
   const item = Office.context.mailbox.item;
   const conversationId = item.conversationId.slice(-24);
   const rawEmail = Office.context.mailbox.userProfile.emailAddress;
   const userId = await hashEmail(rawEmail);
+
+  if (activeConversationId && activeConversationId !== conversationId) {
+    stopMonitoring();
+  }
+
+  if (monitoringStarted && activeConversationId === conversationId) {
+    return;
+  }
+
+  activeConversationId = conversationId;
+  monitoringStarted = true;
 
   document.getElementById("status").textContent = "Monitoring active drafters...";
 
@@ -112,72 +158,54 @@ async function init() {
           timestamp: Date.now()
         })
       });
-  
+
       console.log("heartbeat status", hb.status, await hb.text());
     } catch (err) {
       console.error("Heartbeat failed:", err);
     }
   }
 
-let lastNotificationCount = null;
-  
-function updateNotification(count) {
-  if (count === lastNotificationCount) return;
-
-  lastNotificationCount = count;
-
-  Office.context.mailbox.item.notificationMessages.removeAsync("codraftStatus", () => {
-    if (count >= 1) {
-      Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
-        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-        message: `${count} people are currently drafting replies`,
-        icon: "Icon.16x16",
-        persistent: false
-      });
-    }
-  });
-}
-
-async function updateBanner() {
-  try {
-    const res = await fetch(
-      `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
-      {
-        headers: {
-          "Authorization": `Bearer ${currentToken}`
+  async function updateBanner() {
+    try {
+      const res = await fetch(
+        `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${currentToken}`
+          }
         }
+      );
+
+      if (!res.ok) {
+        console.error("active-drafters failed", res.status, await res.text());
+        return;
       }
-    );
 
-    if (!res.ok) {
-      console.error("active-drafters failed", res.status, await res.text());
-      return;
+      const data = await res.json();
+      const banner = document.getElementById("banner");
+
+      if (data.count >= 1) {
+        banner.style.display = "block";
+        banner.textContent = `${data.count} active drafter(s) detected`;
+      } else {
+        banner.style.display = "none";
+        banner.textContent = "";
+      }
+
+      updateNotification(data.count);
+
+    } catch (err) {
+      console.error("Banner update failed:", err);
     }
-
-    const data = await res.json();
-    const banner = document.getElementById("banner");
-
-    if (data.count >= 1) {
-      banner.style.display = "block";
-      banner.textContent = `${data.count} active drafter(s) detected`;
-    } else {
-      banner.style.display = "none";
-      banner.textContent = "";
-    }
-
-    updateNotification(data.count);
-
-  } catch (err) {
-    console.error("Banner update failed:", err);
   }
-}
 
   await sendHeartbeat();
   await updateBanner();
 
-  setInterval(sendHeartbeat, 10000);
-  setInterval(updateBanner, 5000);
+  heartbeatInterval = setInterval(sendHeartbeat, 10000);
+  bannerInterval = setInterval(updateBanner, 5000);
 }
+
 
 async function trySilentAuth() {
   try {
