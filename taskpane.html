@@ -31,18 +31,5 @@
 
   <script src="taskpane.js"></script>
 
-  <script>
-    Office.onReady(() => {
-      const btn = document.getElementById("signin");
-
-      if (btn) {
-        btn.addEventListener("click", () => {
-          signInAndCallBackend();
-        });
-      } else {
-        console.error("Signin button not found");
-      }
-    });
-  </script>
 </body>
 </html>
