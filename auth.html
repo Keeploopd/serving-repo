@@ -50,7 +50,12 @@
   
         sendToTaskpane({
           success: true,
-          accessToken: silentResult.accessToken
+          accessToken: silentResult.accessToken,
+          account: {
+            homeAccountId: result.account.homeAccountId,
+            username: result.account.username,
+            tenantId: result.account.tenantId
+          }
         });
         return;
       }
