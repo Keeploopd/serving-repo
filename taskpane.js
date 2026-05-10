@@ -228,16 +228,23 @@ async function trySilentAuth() {
 }
 
 Office.onReady(async () => {
-  document.getElementById("signin").addEventListener("click", signInAndCallBackend);
+  const signinButton = document.getElementById("signin");
+
+  if (!signinButton) {
+    console.error("signin button not found");
+    return;
+  }
+
+  signinButton.addEventListener("click", signInAndCallBackend);
 
   const silentToken = await trySilentAuth();
 
   if (silentToken) {
     currentToken = silentToken;
-    document.getElementById("signin").style.display = "none";
+    signinButton.style.display = "none";
     await init();
   } else {
     document.getElementById("status").textContent = "Sign in required.";
-    document.getElementById("signin").style.display = "block";
+    signinButton.style.display = "block";
   }
 });
