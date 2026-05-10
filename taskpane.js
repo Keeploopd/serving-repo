@@ -211,6 +211,17 @@ async function trySilentAuth() {
   try {
     await msalInstance.initialize();
 
+    try {
+      const silentResult = await msalInstance.ssoSilent({
+        scopes: apiRequest.scopes,
+        loginHint: Office.context.mailbox.userProfile.emailAddress
+      });
+
+      return silentResult.accessToken;
+    } catch (ssoErr) {
+      console.warn("ssoSilent failed", ssoErr);
+    }
+
     const accounts = msalInstance.getAllAccounts();
     if (!accounts.length) return null;
 
