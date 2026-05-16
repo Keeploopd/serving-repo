@@ -8,26 +8,728 @@
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
   <style>
-    body { font-family: Segoe UI, sans-serif; padding: 16px; margin: 0; }
-    #banner {
-      padding: 10px;
-      background: #cefcff;
-      border: 1px solid #60d8f0;
-      border-radius: 4px;
-      font-size: 14px;
-      min-height: 36px;
-      display: none;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #f4f5f7;
+      --surface:      #ffffff;
+      --border:       #e4e6ea;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --text-muted:   #9ca3af;
+      --accent:       #0f6cbd;
+      --accent-soft:  #eff6ff;
+      --accent-border:#bfdbfe;
+      --green:        #16a34a;
+      --green-soft:   #f0fdf4;
+      --amber:        #d97706;
+      --amber-soft:   #fffbeb;
+      --red:          #dc2626;
+      --red-soft:     #fef2f2;
+      --purple:       #7c3aed;
+      --purple-soft:  #f5f3ff;
+      --radius:       10px;
+      --radius-sm:    6px;
+      --shadow:       0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
     }
-    #status { font-size: 12px; color: #888; margin-top: 12px; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────── */
+    .tp-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .tp-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tp-logo {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tp-logo svg { width: 16px; height: 16px; fill: #fff; }
+
+    .tp-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .tp-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* Sign-in button */
+    #signin {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-sm);
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+
+    #signin:hover {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+
+    /* ── Banner (preserved) ───────────────────────── */
+    #banner {
+      margin: 10px 12px 0;
+      padding: 9px 12px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      color: var(--accent);
+      font-weight: 500;
+      display: none;
+      animation: fadeIn .25s ease;
+    }
+
+    /* ── Status bar (preserved) ───────────────────── */
+    #status-bar {
+      padding: 6px 14px 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+
+    #status {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ── Scroll area ──────────────────────────────── */
+    .tp-body {
+      padding: 8px 12px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── Card base ────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: fadeUp .3s ease both;
+    }
+
+    .card:nth-child(1) { animation-delay: .05s; }
+    .card:nth-child(2) { animation-delay: .10s; }
+    .card:nth-child(3) { animation-delay: .15s; }
+    .card:nth-child(4) { animation-delay: .20s; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 13px 9px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .card-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .card-icon svg { width: 13px; height: 13px; }
+
+    .card-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .card-badge {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .badge-ai {
+      background: var(--purple-soft);
+      color: var(--purple);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .badge-ai::before {
+      content: '✦';
+      font-size: 8px;
+    }
+
+    .card-body { padding: 10px 13px; }
+
+    /* ── Participants card ────────────────────────── */
+    .participants-list {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .participant {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 52px;
+    }
+
+    .avatar-wrap {
+      position: relative;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .avatar-status {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      border: 1.5px solid var(--surface);
+    }
+
+    .participant-name {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .participant-role {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ── Task rows ────────────────────────────────── */
+    .task-list { display: flex; flex-direction: column; }
+
+    .task-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+
+    .task-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .task-row:first-child { padding-top: 0; }
+
+    .task-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .task-icon-wrap {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .task-icon-wrap svg { width: 14px; height: 14px; }
+
+    .task-text {
+      font-size: 12px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .task-tag {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tag-blue   { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); }
+    .tag-green  { background: var(--green-soft);  color: var(--green);  border: 1px solid #bbf7d0; }
+    .tag-amber  { background: var(--amber-soft);  color: var(--amber);  border: 1px solid #fde68a; }
+    .tag-purple { background: var(--purple-soft); color: var(--purple); border: 1px solid #ddd6fe; }
+    .tag-muted  { background: var(--bg);          color: var(--text-muted); border: 1px solid var(--border); }
+
+    .see-all-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 9px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .see-all-link:hover { text-decoration: underline; }
+
+    /* ── Open questions ───────────────────────────── */
+    .question-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .question-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      padding: 7px 9px;
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .question-bullet {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+
+    /* ── Reply focus ──────────────────────────────── */
+    .reply-subtitle {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .reply-targets {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .reply-target {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .reply-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .reply-target-name {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .reply-target-role {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* ── Thread health ────────────────────────────── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .health-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 4px 6px;
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      text-align: center;
+    }
+
+    .health-cell svg { width: 16px; height: 16px; }
+
+    .health-num {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'DM Mono', monospace;
+      line-height: 1;
+      color: var(--text-primary);
+    }
+
+    .health-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      line-height: 1.2;
+    }
+
+    .health-status {
+      font-size: 9.5px;
+      font-weight: 600;
+      font-family: 'DM Mono', monospace;
+      margin-top: 1px;
+    }
+
+    /* ── Placeholder shimmer ──────────────────────── */
+    .placeholder {
+      background: linear-gradient(90deg, var(--border) 25%, #eee 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite;
+      border-radius: 4px;
+      opacity: .55;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 
 <body>
-  <button id="signin">Sign-In</button>
 
+  <!-- ── Header ──────────────────────────────────── -->
+  <div class="tp-header">
+    <div class="tp-header-left">
+      <div class="tp-logo">
+        <!-- simple envelope spark icon -->
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h11A1.5 1.5 0 0 1 15 3.5v.9L8 9 1 4.4V3.5Z"/>
+          <path d="M1 5.6V12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 15 12V5.6L8 10.6 1 5.6Z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="tp-title">Co-draft Detector</div>
+        <div class="tp-subtitle">v0.1 · beta</div>
+      </div>
+    </div>
+    <button id="signin">Sign In</button>
+  </div>
+
+  <!-- ── Banner (preserved from original) ─────────── -->
   <div id="banner"></div>
-  <div id="status">Ready</div>
+
+  <!-- ── Status (preserved from original) ─────────── -->
+  <div id="status-bar">
+    <div class="status-dot"></div>
+    <div id="status">Ready</div>
+  </div>
+
+  <!-- ── Scrollable body ───────────────────────────── -->
+  <div class="tp-body">
+
+    <!-- Participants -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon" style="background:#eff6ff;">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="6" cy="5" r="2.5" fill="#0f6cbd"/>
+              <path d="M1 13c0-2.2 2.2-4 5-4s5 1.8 5 4" stroke="#0f6cbd" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+              <circle cx="11.5" cy="5" r="2" fill="#93c5fd"/>
+              <path d="M13 13c0-1.6-1.3-2.9-3-3.4" stroke="#93c5fd" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+            </svg>
+          </div>
+          <span class="card-title">Participants</span>
+        </div>
+        <span class="card-badge tag-muted">— · —</span>
+      </div>
+      <div class="card-body">
+        <div class="participants-list">
+          <!-- Placeholder avatars -->
+          <div class="participant">
+            <div class="avatar-wrap">
+              <div class="avatar placeholder" style="width:32px;height:32px;border-radius:50%;"></div>
+            </div>
+            <div class="placeholder" style="width:36px;height:8px;margin-top:4px;border-radius:4px;"></div>
+            <div class="placeholder" style="width:28px;height:7px;margin-top:2px;border-radius:4px;"></div>
+          </div>
+          <div class="participant">
+            <div class="avatar-wrap">
+              <div class="avatar placeholder" style="width:32px;height:32px;border-radius:50%;"></div>
+            </div>
+            <div class="placeholder" style="width:36px;height:8px;margin-top:4px;border-radius:4px;"></div>
+            <div class="placeholder" style="width:28px;height:7px;margin-top:2px;border-radius:4px;"></div>
+          </div>
+          <div class="participant">
+            <div class="avatar-wrap">
+              <div class="avatar placeholder" style="width:32px;height:32px;border-radius:50%;"></div>
+            </div>
+            <div class="placeholder" style="width:36px;height:8px;margin-top:4px;border-radius:4px;"></div>
+            <div class="placeholder" style="width:28px;height:7px;margin-top:2px;border-radius:4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mission Control (tasks) -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon" style="background:#fff7ed;">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="8" r="6.5" stroke="#d97706" stroke-width="1.4"/>
+              <circle cx="8" cy="8" r="2.5" fill="#d97706"/>
+              <line x1="8" y1="1" x2="8" y2="3.5" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/>
+              <line x1="8" y1="12.5" x2="8" y2="15" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/>
+              <line x1="1" y1="8" x2="3.5" y2="8" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/>
+              <line x1="12.5" y1="8" x2="15" y2="8" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="card-title">Mission Control</span>
+        </div>
+        <span class="card-badge badge-ai">AI generated</span>
+      </div>
+      <div class="card-body">
+        <div class="task-list">
+          <!-- Placeholder task rows -->
+          <div class="task-row">
+            <div class="task-left">
+              <div class="task-icon-wrap"><div class="placeholder" style="width:14px;height:14px;border-radius:50%;"></div></div>
+              <div class="placeholder" style="height:10px;width:70%;border-radius:4px;"></div>
+            </div>
+            <div class="placeholder" style="width:52px;height:18px;border-radius:20px;"></div>
+          </div>
+          <div class="task-row">
+            <div class="task-left">
+              <div class="task-icon-wrap"><div class="placeholder" style="width:14px;height:14px;border-radius:50%;"></div></div>
+              <div class="placeholder" style="height:10px;width:55%;border-radius:4px;"></div>
+            </div>
+            <div class="placeholder" style="width:44px;height:18px;border-radius:20px;"></div>
+          </div>
+          <div class="task-row">
+            <div class="task-left">
+              <div class="task-icon-wrap"><div class="placeholder" style="width:14px;height:14px;border-radius:50%;"></div></div>
+              <div class="placeholder" style="height:10px;width:80%;border-radius:4px;"></div>
+            </div>
+            <div class="placeholder" style="width:44px;height:18px;border-radius:20px;"></div>
+          </div>
+        </div>
+        <span class="see-all-link">See all tasks &rsaquo;</span>
+      </div>
+    </div>
+
+    <!-- Open Questions -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon" style="background:#f5f3ff;">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="8" r="6.5" stroke="#7c3aed" stroke-width="1.4"/>
+              <path d="M6.2 6.5c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8c0 .8-.5 1.3-1.1 1.7C8.1 8.6 8 9 8 9.4" stroke="#7c3aed" stroke-width="1.3" stroke-linecap="round"/>
+              <circle cx="8" cy="11.2" r=".7" fill="#7c3aed"/>
+            </svg>
+          </div>
+          <span class="card-title">Open Questions</span>
+        </div>
+        <span class="card-badge tag-muted">—</span>
+      </div>
+      <div class="card-body">
+        <div class="question-list">
+          <div class="question-item">
+            <div class="question-bullet"></div>
+            <div class="placeholder" style="height:10px;width:80%;border-radius:4px;"></div>
+          </div>
+          <div class="question-item">
+            <div class="question-bullet"></div>
+            <div class="placeholder" style="height:10px;width:60%;border-radius:4px;"></div>
+          </div>
+        </div>
+        <span class="see-all-link" style="margin-top:8px;">See all &rsaquo;</span>
+      </div>
+    </div>
+
+    <!-- Suggested Reply Focus -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon" style="background:#f0fdf4;">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 9.5L8 2l6 7.5H9.5L11 14H5L6.5 9.5H2Z" stroke="#16a34a" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="card-title">Suggested Reply Focus</span>
+        </div>
+        <span class="card-badge badge-ai">AI generated</span>
+      </div>
+      <div class="card-body">
+        <div class="reply-subtitle">This reply appears directed primarily at:</div>
+        <div class="reply-targets">
+          <div class="reply-target">
+            <div class="reply-avatar placeholder" style="width:26px;height:26px;border-radius:50%;"></div>
+            <div>
+              <div class="reply-target-name">
+                <div class="placeholder" style="width:50px;height:9px;border-radius:4px;"></div>
+              </div>
+              <div class="reply-target-role" style="margin-top:3px;">
+                <div class="placeholder" style="width:64px;height:8px;border-radius:4px;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-target">
+            <div class="reply-avatar placeholder" style="width:26px;height:26px;border-radius:50%;"></div>
+            <div>
+              <div class="reply-target-name">
+                <div class="placeholder" style="width:50px;height:9px;border-radius:4px;"></div>
+              </div>
+              <div class="reply-target-role" style="margin-top:3px;">
+                <div class="placeholder" style="width:64px;height:8px;border-radius:4px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thread Health -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-icon" style="background:#fef2f2;">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 13.5S2 10 2 6a3 3 0 0 1 6 0 3 3 0 0 1 6 0c0 4-6 7.5-6 7.5Z" stroke="#dc2626" stroke-width="1.4" fill="none"/>
+            </svg>
+          </div>
+          <span class="card-title">Thread Health</span>
+        </div>
+        <span class="card-badge tag-muted" style="font-size:10px;">Updated just now</span>
+      </div>
+      <div class="card-body">
+        <div class="health-grid">
+          <div class="health-cell">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 12v1.5" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="14" r=".5" fill="#d97706"/><path d="M2 14L8 2l6 12H2Z" stroke="#d97706" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            <div class="health-num">—</div>
+            <div class="health-label">Unresolved asks</div>
+            <div class="health-status" style="color:var(--text-muted);">Pending</div>
+          </div>
+          <div class="health-cell">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#16a34a" stroke-width="1.3"/><path d="M5 8l2 2 4-4" stroke="#16a34a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="health-num">—</div>
+            <div class="health-label">Decisions made</div>
+            <div class="health-status" style="color:var(--text-muted);">Pending</div>
+          </div>
+          <div class="health-cell">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#d97706" stroke-width="1.3"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="10.5" r=".7" fill="#d97706"/></svg>
+            <div class="health-num">—</div>
+            <div class="health-label">Blockers</div>
+            <div class="health-status" style="color:var(--text-muted);">Pending</div>
+          </div>
+          <div class="health-cell">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M2 2h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-3 3v-3H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" stroke="#0f6cbd" stroke-width="1.3"/></svg>
+            <div class="health-num">—</div>
+            <div class="health-label">Messages</div>
+            <div class="health-status" style="color:var(--text-muted);">This thread</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.tp-body -->
 
   <script src="taskpane.js"></script>
 
