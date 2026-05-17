@@ -67,7 +67,7 @@ async function signInAndCallBackend() {
           }
 
           currentToken = payload.accessToken;
-          await OfficeRuntime.storage.setItem("keeploopd_token", currentToken);
+          try { localStorage.setItem("keeploopd_token", currentToken); } catch (e) {}
           document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
           await init();
@@ -289,7 +289,7 @@ Office.onReady(async () => {
 
   if (silentToken) {
     currentToken = silentToken;
-    await OfficeRuntime.storage.setItem("keeploopd_token", currentToken);
+    try { localStorage.setItem("keeploopd_token", currentToken); } catch (e) {}
     signinButton.style.display = "none";
     await init();
   } else {
@@ -303,6 +303,6 @@ Office.onReady(async () => {
     } catch (err) {
       console.warn("Could not clear Co-Draft notification on unload", err);
     }
-    OfficeRuntime.storage.removeItem("keeploopd_token").catch(() => {});
+    try { localStorage.removeItem("keeploopd_token"); } catch (e) {}
   });
 });
