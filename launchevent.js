@@ -1,21 +1,13 @@
-// launchevent.js
-// Handles:
-//   1. OnNewMessageCompose — fires automatically when a compose window opens
-//   2. syncCoDrafters      — fires when the "Sync Co-Drafters" ribbon button is clicked
-//
-// Token strategy: reads from localStorage written by taskpane.js after auth.
-// ssoSilent is NOT used here — it requires an iframe which is blocked in the
-// restricted event-based activation runtime.
 
 Office.initialize = function () {};
 
 // ---------------------------------------------------------------------------
-// Token retrieval — reads what taskpane.js stored after sign-in
+// Token retrieval — reads what taskpane.js stored via OfficeRuntime.storage
 // ---------------------------------------------------------------------------
 
-function getStoredToken() {
+async function getStoredToken() {
   try {
-    return localStorage.getItem("keeploopd_token");
+    return await OfficeRuntime.storage.getItem("keeploopd_token");
   } catch {
     return null;
   }
@@ -62,7 +54,7 @@ async function runCoDraftCheck(item, token) {
   const conversationId = await getConversationKey(item);
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
-  // Show progress while in flight — no persistent property on ProgressIndicator
+  // Show progress while in flight — persistent not valid on ProgressIndicator
   await item.notificationMessages.replaceAsync("codraftStatus", {
     type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
     message: "Checking for co-drafters..."
@@ -96,7 +88,7 @@ async function runCoDraftCheck(item, token) {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
       message: `${count} person${count > 1 ? "s are" : " is"} currently drafting a reply`,
       icon: "Icon.16x16",
-      persistent: true
+      persistent: false
     });
   } else {
     await item.notificationMessages.removeAsync("codraftStatus");
@@ -104,12 +96,12 @@ async function runCoDraftCheck(item, token) {
 }
 
 // ---------------------------------------------------------------------------
-// Entry point 1: LaunchEvent — fires automatically when compose opens
+// Shared handler — used by both entry points
 // ---------------------------------------------------------------------------
 
-async function onNewMessageCompose(event) {
+async function runCheck(event) {
   const item = Office.context.mailbox.item;
-  const token = getStoredToken();
+  const token = await getStoredToken();
 
   if (!token) {
     item.notificationMessages.replaceAsync("codraftStatus", {
@@ -124,41 +116,7 @@ async function onNewMessageCompose(event) {
   try {
     await runCoDraftCheck(item, token);
   } catch (err) {
-    console.error("onNewMessageCompose check failed:", err);
-    item.notificationMessages.replaceAsync("codraftStatus", {
-      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: "Co-drafter check failed. Click Sync Co-Drafters to retry.",
-      icon: "Icon.16x16",
-      persistent: false
-    }, () => event.completed());
-    return;
-  }
-
-  event.completed();
-}
-
-// ---------------------------------------------------------------------------
-// Entry point 2: ExecuteFunction — fires when "Sync Co-Drafters" button clicked
-// ---------------------------------------------------------------------------
-
-async function syncCoDrafters(event) {
-  const item = Office.context.mailbox.item;
-  const token = getStoredToken();
-
-  if (!token) {
-    item.notificationMessages.replaceAsync("codraftStatus", {
-      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: "Open Co-Draft to sign in and enable co-drafter detection.",
-      icon: "Icon.16x16",
-      persistent: false
-    }, () => event.completed());
-    return;
-  }
-
-  try {
-    await runCoDraftCheck(item, token);
-  } catch (err) {
-    console.error("syncCoDrafters failed:", err);
+    console.error("Co-draft check failed:", err);
     item.notificationMessages.replaceAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
       message: "Co-drafter check failed. Please try again.",
@@ -169,6 +127,22 @@ async function syncCoDrafters(event) {
   }
 
   event.completed();
+}
+
+// ---------------------------------------------------------------------------
+// Entry point 1: LaunchEvent — fires automatically when compose opens
+// ---------------------------------------------------------------------------
+
+async function onNewMessageCompose(event) {
+  await runCheck(event);
+}
+
+// ---------------------------------------------------------------------------
+// Entry point 2: ExecuteFunction — fires when "Sync Co-Drafters" button clicked
+// ---------------------------------------------------------------------------
+
+async function syncCoDrafters(event) {
+  await runCheck(event);
 }
 
 // ---------------------------------------------------------------------------
