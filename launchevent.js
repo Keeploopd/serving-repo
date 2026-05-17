@@ -2,19 +2,53 @@
 Office.initialize = function () {};
 
 // ---------------------------------------------------------------------------
-// Token retrieval — reads what taskpane.js stored via OfficeRuntime.storage
+// MSAL config — for ssoSilent fallback in classic Outlook
 // ---------------------------------------------------------------------------
 
-async function getStoredToken() {
+const msalConfig = {
+  auth: {
+    clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
+    authority: "https://login.microsoftonline.com/5904ae0b-47e9-4b06-843e-60769342a32b",
+    redirectUri: "https://co-draft.keeploopd.com/commands.html"
+  },
+  cache: {
+    cacheLocation: "sessionStorage"
+  }
+};
+
+const apiRequest = {
+  scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
+};
+
+// ---------------------------------------------------------------------------
+// Token retrieval — localStorage first, ssoSilent fallback
+// ---------------------------------------------------------------------------
+
+async function getToken() {
+  // Try localStorage (OWA — taskpane and commands share same origin)
   try {
-    return await OfficeRuntime.storage.getItem("keeploopd_token");
-  } catch {
+    const stored = localStorage.getItem("keeploopd_token");
+    if (stored) return stored;
+  } catch (e) {}
+
+  // Fallback: ssoSilent (classic Outlook — isolated runtimes, no shared storage)
+  // Note: this can timeout on some clients, hence localStorage is preferred
+  try {
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    await msalInstance.initialize();
+    const result = await msalInstance.ssoSilent({
+      ...apiRequest,
+      loginHint: Office.context.mailbox.userProfile.emailAddress
+    });
+    return result.accessToken;
+  } catch (e) {
+    console.warn("ssoSilent fallback failed:", e);
     return null;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Conversation key helpers (kept consistent with taskpane.js)
+// Conversation key helpers (consistent with taskpane.js)
 // ---------------------------------------------------------------------------
 
 async function sha256(value) {
@@ -47,20 +81,20 @@ async function getConversationKey(item) {
 }
 
 // ---------------------------------------------------------------------------
-// Core detection logic — shared by both entry points
+// Core detection logic
 // ---------------------------------------------------------------------------
 
 async function runCoDraftCheck(item, token) {
   const conversationId = await getConversationKey(item);
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
-  // Show progress while in flight — persistent not valid on ProgressIndicator
+  // Progress indicator while in flight
   await item.notificationMessages.replaceAsync("codraftStatus", {
     type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
     message: "Checking for co-drafters..."
   });
 
-  // Send heartbeat so this user registers as an active drafter
+  // Heartbeat
   await fetch("https://api.keeploopd.com/heartbeat", {
     method: "POST",
     headers: {
@@ -70,15 +104,13 @@ async function runCoDraftCheck(item, token) {
     body: JSON.stringify({ conversationId, userId, timestamp: Date.now() })
   });
 
-  // Fetch active drafter count
+  // Fetch count
   const res = await fetch(
     `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
 
-  if (!res.ok) {
-    throw new Error(`active-drafters returned ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`active-drafters returned ${res.status}`);
 
   const data = await res.json();
   const count = data.count ?? 0;
@@ -96,12 +128,18 @@ async function runCoDraftCheck(item, token) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared handler — used by both entry points
+// Shared handler
 // ---------------------------------------------------------------------------
 
 async function runCheck(event) {
   const item = Office.context.mailbox.item;
-  const token = await getStoredToken();
+
+  let token;
+  try {
+    token = await getToken();
+  } catch (e) {
+    token = null;
+  }
 
   if (!token) {
     item.notificationMessages.replaceAsync("codraftStatus", {
@@ -130,24 +168,16 @@ async function runCheck(event) {
 }
 
 // ---------------------------------------------------------------------------
-// Entry point 1: LaunchEvent — fires automatically when compose opens
+// Entry points
 // ---------------------------------------------------------------------------
 
 async function onNewMessageCompose(event) {
   await runCheck(event);
 }
 
-// ---------------------------------------------------------------------------
-// Entry point 2: ExecuteFunction — fires when "Sync Co-Drafters" button clicked
-// ---------------------------------------------------------------------------
-
 async function syncCoDrafters(event) {
   await runCheck(event);
 }
-
-// ---------------------------------------------------------------------------
-// Register both functions with Office
-// ---------------------------------------------------------------------------
 
 Office.actions.associate("onNewMessageCompose", onNewMessageCompose);
 Office.actions.associate("syncCoDrafters", syncCoDrafters);
