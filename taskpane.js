@@ -275,6 +275,9 @@ async function trySilentAuth() {
 }
 
 Office.onReady(async () => {
+  console.log("Mailbox version:", Office.context.requirements.isSetSupported("Mailbox", "1.3"));
+  console.log("LaunchEvent 1.1:", Office.context.requirements.isSetSupported("LaunchEvent", "1.1"));
+
   const signinButton = document.getElementById("signin");
 
   if (!signinButton) {
