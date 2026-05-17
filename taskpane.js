@@ -67,6 +67,7 @@ async function signInAndCallBackend() {
           }
 
           currentToken = payload.accessToken;
+          await OfficeRuntime.storage.setItem("keeploopd_token", currentToken);
           document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
           await init();
@@ -275,9 +276,6 @@ async function trySilentAuth() {
 }
 
 Office.onReady(async () => {
-  console.log("Mailbox version:", Office.context.requirements.isSetSupported("Mailbox", "1.3"));
-  console.log("LaunchEvent 1.1:", Office.context.requirements.isSetSupported("LaunchEvent", "1.1"));
-
   const signinButton = document.getElementById("signin");
 
   if (!signinButton) {
@@ -291,6 +289,7 @@ Office.onReady(async () => {
 
   if (silentToken) {
     currentToken = silentToken;
+    await OfficeRuntime.storage.setItem("keeploopd_token", currentToken);
     signinButton.style.display = "none";
     await init();
   } else {
@@ -304,5 +303,6 @@ Office.onReady(async () => {
     } catch (err) {
       console.warn("Could not clear Co-Draft notification on unload", err);
     }
+    OfficeRuntime.storage.removeItem("keeploopd_token").catch(() => {});
   });
 });
