@@ -13,6 +13,8 @@ const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
+Office.initialize = function() {};
+
 
 async function getSilentToken() {
   const msalInstance = new msal.PublicClientApplication(msalConfig);
