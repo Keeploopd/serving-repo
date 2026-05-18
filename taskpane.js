@@ -112,7 +112,8 @@ function updateNotification(count) {
     if (count >= 1) {
       Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
         type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-        message: `${count} people are currently drafting replies`,
+        //message: `${count} people are currently drafting replies`,
+        message: `${count} ${count > 1 ? "people are" : "person is"} currently drafting a reply`,
         icon: "Icon.16x16",
         persistent: false
       });
