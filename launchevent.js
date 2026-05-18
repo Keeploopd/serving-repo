@@ -130,6 +130,8 @@ async function runCoDraftCheck(item, token) {
 //  }
 //}
 
+  await item.notificationMessages.removeAsync("codraftStatus");
+
   if (count >= 1) {
     await item.notificationMessages.addAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
@@ -138,6 +140,8 @@ async function runCoDraftCheck(item, token) {
       persistent: false
     });
   }
+}
+      
 
 
 // ---------------------------------------------------------------------------
