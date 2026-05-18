@@ -139,8 +139,6 @@ async function runCoDraftCheck(item, token) {
     });
   }
 
-  await item.notificationMessages.removeAsync("codraftStatus");
-
 
 // ---------------------------------------------------------------------------
 // Shared handler
