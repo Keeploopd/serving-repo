@@ -1,9 +1,6 @@
-
 Office.initialize = function () {};
 
-// ---------------------------------------------------------------------------
-// MSAL config — for ssoSilent fallback in classic Outlook
-// ---------------------------------------------------------------------------
+
 
 const msalConfig = {
   auth: {
@@ -20,19 +17,14 @@ const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
-// ---------------------------------------------------------------------------
-// Token retrieval — localStorage first, ssoSilent fallback
-// ---------------------------------------------------------------------------
+
 
 async function getToken() {
-  // Try localStorage (OWA — taskpane and commands share same origin)
   try {
     const stored = localStorage.getItem("keeploopd_token");
     if (stored) return stored;
   } catch (e) {}
 
-  // Fallback: ssoSilent (classic Outlook — isolated runtimes, no shared storage)
-  // Note: this can timeout on some clients, hence localStorage is preferred
   try {
     const msalInstance = new msal.PublicClientApplication(msalConfig);
     await msalInstance.initialize();
@@ -47,9 +39,7 @@ async function getToken() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Conversation key helpers (consistent with taskpane.js)
-// ---------------------------------------------------------------------------
+
 
 async function sha256(value) {
   const encoded = new TextEncoder().encode(value);
@@ -80,19 +70,17 @@ async function getConversationKey(item) {
   return sha256(`${sharedConversationPart}|${subject}`);
 }
 
-// ---------------------------------------------------------------------------
-// Core detection logic
-// ---------------------------------------------------------------------------
+
 
 async function runCoDraftCheck(item, token) {
   const conversationId = await getConversationKey(item);
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
-  // Progress indicator while in flight
-  //await item.notificationMessages.replaceAsync("codraftStatus", {
-  //  type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
-  //  message: "Checking for co-drafters..."
-  //});
+  // Progress indicator
+  await item.notificationMessages.replaceAsync("codraftStatus", {
+    type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
+    message: "Checking for co-drafters..."
+  });
 
   // Heartbeat
   await fetch("https://api.keeploopd.com/heartbeat", {
@@ -112,30 +100,15 @@ async function runCoDraftCheck(item, token) {
 
   if (!res.ok) throw new Error(`active-drafters returned ${res.status}`);
 
-  const rawText = await res.text();
-  console.log("active-drafters raw response:", rawText);
-  const data = JSON.parse(rawText || "{}");
+  const data = await res.json();
   const count = data.count ?? 0;
-  console.log("parsed count:", count);
-
-//  if (count >= 1) {
-//    await item.notificationMessages.replaceAsync("codraftStatus", {
-//      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-//      message: `${count} person${count > 1 ? "s are" : " is"} currently drafting a reply`,
-//      icon: "Icon.16x16",
-//      persistent: false
-//    });
-//  } else {
-//    await item.notificationMessages.removeAsync("codraftStatus");
-//  }
-//}
 
   await item.notificationMessages.removeAsync("codraftStatus");
 
   if (count >= 1) {
     await item.notificationMessages.addAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: `${count} person${count > 1 ? "s are" : " is"} currently drafting a reply`,
+      message: `${count} ${count > 1 ? "people are" : "person is"} currently drafting a reply`,
       icon: "Icon.16x16",
       persistent: false
     });
@@ -143,10 +116,6 @@ async function runCoDraftCheck(item, token) {
 }
       
 
-
-// ---------------------------------------------------------------------------
-// Shared handler
-// ---------------------------------------------------------------------------
 
 async function runCheck(event) {
   const item = Office.context.mailbox.item;
@@ -184,9 +153,7 @@ async function runCheck(event) {
   event.completed();
 }
 
-// ---------------------------------------------------------------------------
-// Entry points
-// ---------------------------------------------------------------------------
+
 
 async function onNewMessageCompose(event) {
   await runCheck(event);
