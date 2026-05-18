@@ -112,8 +112,11 @@ async function runCoDraftCheck(item, token) {
 
   if (!res.ok) throw new Error(`active-drafters returned ${res.status}`);
 
-  const data = await res.json();
+  const rawText = await res.text();
+  console.log("active-drafters raw response:", rawText);
+  const data = JSON.parse(rawText || "{}");
   const count = data.count ?? 0;
+  console.log("parsed count:", count);
 
   if (count >= 1) {
     await item.notificationMessages.replaceAsync("codraftStatus", {
