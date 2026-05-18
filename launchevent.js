@@ -77,10 +77,10 @@ async function runCoDraftCheck(item, token) {
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
   // Progress indicator
-  await item.notificationMessages.replaceAsync("codraftStatus", {
-    type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
-    message: "Checking for co-drafters..."
-  });
+  //await item.notificationMessages.replaceAsync("codraftStatus", {
+  //  type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
+  //  message: "Checking for co-drafters..."
+  //});
 
   // Heartbeat
   await fetch("https://api.keeploopd.com/heartbeat", {
