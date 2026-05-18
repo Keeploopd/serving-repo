@@ -89,10 +89,10 @@ async function runCoDraftCheck(item, token) {
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
   // Progress indicator while in flight
-  await item.notificationMessages.replaceAsync("codraftStatus", {
-    type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
-    message: "Checking for co-drafters..."
-  });
+  //await item.notificationMessages.replaceAsync("codraftStatus", {
+  //  type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
+  //  message: "Checking for co-drafters..."
+  //});
 
   // Heartbeat
   await fetch("https://api.keeploopd.com/heartbeat", {
@@ -118,17 +118,29 @@ async function runCoDraftCheck(item, token) {
   const count = data.count ?? 0;
   console.log("parsed count:", count);
 
+//  if (count >= 1) {
+//    await item.notificationMessages.replaceAsync("codraftStatus", {
+//      type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+//      message: `${count} person${count > 1 ? "s are" : " is"} currently drafting a reply`,
+//      icon: "Icon.16x16",
+//      persistent: false
+//    });
+//  } else {
+//    await item.notificationMessages.removeAsync("codraftStatus");
+//  }
+//}
+
   if (count >= 1) {
-    await item.notificationMessages.replaceAsync("codraftStatus", {
+    await item.notificationMessages.addAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
       message: `${count} person${count > 1 ? "s are" : " is"} currently drafting a reply`,
       icon: "Icon.16x16",
       persistent: false
     });
-  } else {
-    await item.notificationMessages.removeAsync("codraftStatus");
   }
-}
+
+  await item.notificationMessages.removeAsync("codraftStatus");
+
 
 // ---------------------------------------------------------------------------
 // Shared handler
