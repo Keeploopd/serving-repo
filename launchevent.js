@@ -114,18 +114,10 @@ async function runCoDraftCheck(item, token) {
     });
   }
 }
-      
-
-
-async function runCheck(event) {
+ 
+async function runCheck(event = null) {
   const item = Office.context.mailbox.item;
-
-  let token;
-  try {
-    token = await getToken();
-  } catch (e) {
-    token = null;
-  }
+  const token = await getToken();
 
   if (!token) {
     item.notificationMessages.replaceAsync("codraftStatus", {
@@ -133,7 +125,7 @@ async function runCheck(event) {
       message: "Open Co-Draft to sign in and enable co-drafter detection.",
       icon: "Icon.16x16",
       persistent: false
-    }, () => event.completed());
+    }, () => { if (event) event.completed(); });
     return;
   }
 
@@ -146,20 +138,51 @@ async function runCheck(event) {
       message: "Co-drafter check failed. Please try again.",
       icon: "Icon.16x16",
       persistent: false
-    }, () => event.completed());
-    return;
+    });
   }
 
-  event.completed();
+  if (event) event.completed();
 }
 
 
+let pollingInterval = null;
 
 async function onNewMessageCompose(event) {
-  await runCheck(event);
+  // Complete the event immediately so Office doesn't time out
+  event.completed();
+
+  // Run initial check
+  await runCheck();
+
+  // Start polling every 15 seconds
+  pollingInterval = setInterval(async () => {
+    await runCheck();
+  }, 15000);
+
+  // Auto-stop after 10 minutes to avoid ghost polling
+  setTimeout(() => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }, 600000);
 }
 
 async function syncCoDrafters(event) {
+  // Reset polling with a shorter 5 minute window on manual sync
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = setInterval(async () => {
+      await runCheck();
+    }, 15000);
+
+    setTimeout(() => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    }, 300000); // 5 minutes
+  }
   await runCheck(event);
 }
 
