@@ -135,7 +135,7 @@ async function runCheck(event = null) {
     console.error("Co-draft check failed:", err);
     item.notificationMessages.replaceAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: "Co-drafter check failed. Please try again.",
+      message: "Co-drafter check failed. Please sign in.",
       icon: "Icon.16x16",
       persistent: false
     });
