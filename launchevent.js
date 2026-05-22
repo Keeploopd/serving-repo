@@ -1,7 +1,6 @@
 Office.initialize = function () {};
 
 
-
 const msalConfig = {
   auth: {
     clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
@@ -16,7 +15,6 @@ const msalConfig = {
 const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
-
 
 
 async function getToken() {
@@ -40,7 +38,6 @@ async function getToken() {
 }
 
 
-
 async function sha256(value) {
   const encoded = new TextEncoder().encode(value);
   const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
@@ -52,6 +49,7 @@ async function sha256(value) {
 async function hashEmail(email) {
   return sha256(email.toLowerCase().trim());
 }
+
 
 async function getConversationKey(item) {
   const rawConversationId = item.conversationId || "";
@@ -71,16 +69,9 @@ async function getConversationKey(item) {
 }
 
 
-
 async function runCoDraftCheck(item, token) {
   const conversationId = await getConversationKey(item);
   const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
-
-  // Progress indicator
-  //await item.notificationMessages.replaceAsync("codraftStatus", {
-  //  type: Office.MailboxEnums.ItemNotificationMessageType.ProgressIndicator,
-  //  message: "Checking for co-drafters..."
-  //});
 
   // Heartbeat
   await fetch("https://api.keeploopd.com/heartbeat", {
@@ -114,7 +105,8 @@ async function runCoDraftCheck(item, token) {
     });
   }
 }
- 
+
+
 async function runCheck(event = null) {
   const item = Office.context.mailbox.item;
   const token = await getToken();
@@ -148,43 +140,53 @@ async function runCheck(event = null) {
 let pollingInterval = null;
 
 async function onNewMessageCompose(event) {
-  // Complete the event immediately so Office doesn't time out
   event.completed();
-
-  // Run initial check
   await runCheck();
 
-  // Start polling every 15 seconds
   pollingInterval = setInterval(async () => {
     await runCheck();
   }, 15000);
 
-  // Auto-stop after 10 minutes to avoid ghost polling
+  setTimeout(async () => {
+    const item = Office.context.mailbox.item;
+    try {
+      await item.notificationMessages.removeAsync("codraftStatus");
+      await item.notificationMessages.addAsync("codraftStatus", {
+        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+        message: "Co-drafter monitoring paused. Click Sync Co-Drafters to resume.",
+        icon: "Icon.16x16",
+        persistent: false
+      });
+    } catch (e) {}
+  }, 270000); 
+
   setTimeout(() => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
       pollingInterval = null;
     }
-  }, 600000);
+  }, 300000); 
 }
 
+
 async function syncCoDrafters(event) {
-  // Reset polling with a shorter 5 minute window on manual sync
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
+  if (pollingInterval) clearInterval(pollingInterval);
+    
     pollingInterval = setInterval(async () => {
       await runCheck();
     }, 15000);
-
+  
     setTimeout(() => {
       if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
       }
-    }, 300000); // 5 minutes
+    }, 300000); 
+  
+    await runCheck(event);
   }
-  await runCheck(event);
-}
+
+
 
 Office.actions.associate("onNewMessageCompose", onNewMessageCompose);
 Office.actions.associate("syncCoDrafters", syncCoDrafters);
