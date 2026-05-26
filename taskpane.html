@@ -127,37 +127,41 @@
 
     /* ── Status bar ───────────────────── */
     #status-bar {
-      padding: 6px 14px 4px;
+      padding: 8px 14px 6px;
       display: flex;
-      align-items: center;
-      gap: 6px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
     }
-
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-    }
-
+    
     .status-row {
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 3px;
+      min-height: 16px;
+      margin: 0;
+      padding: 0;
     }
     
-    #status-bar {
-      padding: 8px 14px 6px;
-      display: flex;
-      flex-direction: column;
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 1px;
     }
     
     #mission-status {
+      display: flex;
+      align-items: center;
+    }
+    
+    #status {
       font-size: 11px;
       color: var(--text-muted);
       font-family: 'DM Mono', monospace;
+      line-height: 1;
+      margin: 0;
     }
     
     .status-amber {
@@ -172,10 +176,14 @@
       background: #dc2626;
     }
 
-    #status {
-      font-size: 11px;
+    .empty-state {
       color: var(--text-muted);
-      font-family: 'DM Mono', monospace;
+    
+      font-size: 11px;
+    
+      font-style: italic;
+    
+      padding: 6px 0;
     }
 
     /* ── Scroll area ──────────────────────────────── */
@@ -550,18 +558,23 @@
 
     <!-- Existing co-draft status -->
     <div class="status-row">
-      <div class="status-dot"></div>
+      <div
+        id="codraft-dot"
+        class="status-dot status-green">
+      </div>
       <div id="status">Monitoring active drafters</div>
     </div>
   
     <!-- Mission Control status -->
-    <div class="status-row">
-      <div id="mission-dot" class="status-dot status-amber"></div>
-      <div id="mission-status">
-        Mission Control not loaded yet.
+    <div class="status-row mission-row">
+      <div
+        id="mission-dot"
+        class="status-dot status-amber">
       </div>
+      <span id="mission-status">
+        Mission Control not loaded yet.
+      </span>
     </div>
-  
   </div>
 
   <!-- ── Scrollable body ───────────────────────────── -->
