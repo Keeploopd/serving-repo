@@ -366,16 +366,36 @@ async function refreshAnalysis() {
   const context = await getConversationContext();
   const token = await getAuthToken();
 
+  const threadText = await getCurrentEmailText();
+
   await fetch("/api/thread/analyse", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify(context)
+    body: JSON.stringify({
+      ...context,
+      threadText
+    })
   });
 
   await loadMissionControl();
+}
+
+async function getCurrentEmailText() {
+  return new Promise((resolve, reject) => {
+    Office.context.mailbox.item.body.getAsync(
+      Office.CoercionType.Text,
+      (result) => {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          resolve(result.value);
+        } else {
+          reject(result.error);
+        }
+      }
+    );
+  });
 }
 
 async function pollUntilReady(conversationId, token) {
