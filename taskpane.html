@@ -111,7 +111,7 @@
       border-color: #93c5fd;
     }
 
-    /* ── Banner (preserved) ───────────────────────── */
+    /* ── Banner ───────────────────────── */
     #banner {
       margin: 10px 12px 0;
       padding: 9px 12px;
@@ -125,7 +125,7 @@
       animation: fadeIn .25s ease;
     }
 
-    /* ── Status bar (preserved) ───────────────────── */
+    /* ── Status bar ───────────────────── */
     #status-bar {
       padding: 6px 14px 4px;
       display: flex;
@@ -139,6 +139,37 @@
       border-radius: 50%;
       background: var(--green);
       flex-shrink: 0;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+    
+    #status-bar {
+      padding: 8px 14px 6px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #mission-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+    
+    .status-amber {
+      background: #d97706;
+    }
+    
+    .status-green {
+      background: #16a34a;
+    }
+    
+    .status-red {
+      background: #dc2626;
     }
 
     #status {
@@ -511,14 +542,26 @@
     <button id="signin">Sign In</button>
   </div>
 
-  <!-- ── Banner (preserved from original) ─────────── -->
+  <!-- ── Banner ─────────── -->
   <div id="banner"></div>
 
-  <!-- ── Status (preserved from original) ─────────── -->
+  <!-- ── Status ─────────── -->
   <div id="status-bar">
-    <div class="status-dot"></div>
-    <div id="status">Ready</div>
-    <div id="mission-status">Mission Control not loaded yet.</div>
+
+    <!-- Existing co-draft status -->
+    <div class="status-row">
+      <div class="status-dot"></div>
+      <div id="status">Monitoring active drafters</div>
+    </div>
+  
+    <!-- Mission Control status -->
+    <div class="status-row">
+      <div id="mission-dot" class="status-dot status-amber"></div>
+      <div id="mission-status">
+        Mission Control not loaded yet.
+      </div>
+    </div>
+  
   </div>
 
   <!-- ── Scrollable body ───────────────────────────── -->
