@@ -306,4 +306,132 @@ Office.onReady(async () => {
     }
     try { localStorage.removeItem("keeploopd_token"); } catch (e) {}
   });
+  document
+    .getElementById("refresh-analysis")
+    .addEventListener("click", refreshAnalysis);
+
+  await loadMissionControl();
 });
+
+async function getConversationContext() {
+  const item = Office.context.mailbox.item;
+
+  return {
+    conversationId: item.conversationId,
+    subject: item.subject,
+    latestMessageSentAtUtc: new Date().toISOString()
+  };
+}
+
+async function getAuthToken() {
+  return await OfficeRuntime.auth.getAccessToken({
+    allowSignInPrompt: true,
+    allowConsentPrompt: true
+  });
+}
+
+async function loadMissionControl() {
+  setStatus("Loading Mission Control...");
+
+  const context = await getConversationContext();
+  const token = await getAuthToken();
+
+  const url = new URL("/api/thread/state", window.location.origin);
+  url.searchParams.set("conversationId", context.conversationId);
+  url.searchParams.set("latestMessageSentAtUtc", context.latestMessageSentAtUtc);
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    setStatus("Unable to load Mission Control.");
+    return;
+  }
+
+  const data = await response.json();
+
+  renderMissionControl(data);
+
+  if (data.status === "refreshing") {
+    pollUntilReady(context.conversationId, token);
+  }
+}
+
+async function refreshAnalysis() {
+  setStatus("Refreshing analysis...");
+
+  const context = await getConversationContext();
+  const token = await getAuthToken();
+
+  await fetch("/api/thread/analyse", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(context)
+  });
+
+  await loadMissionControl();
+}
+
+async function pollUntilReady(conversationId, token) {
+  const interval = setInterval(async () => {
+    const url = new URL("/api/thread/state", window.location.origin);
+    url.searchParams.set("conversationId", conversationId);
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+    renderMissionControl(data);
+
+    if (data.status === "ready") {
+      clearInterval(interval);
+    }
+  }, 3000);
+}
+
+function renderMissionControl(data) {
+  const state = data.state || {};
+
+  setStatus(data.status === "refreshing"
+    ? "Refreshing Mission Control..."
+    : "Mission Control ready");
+
+  renderList("participants", state.activeParticipants || []);
+  renderList("mission-control", state.missionControl || []);
+  renderList("open-questions", state.openQuestions || []);
+
+  document.getElementById("reply-focus").innerText =
+    state.suggestedReplyFocus?.reason || "No reply focus detected.";
+
+  document.getElementById("thread-health").innerText =
+    state.threadHealth?.summary || "No thread health available.";
+}
+
+function renderList(elementId, items) {
+  const el = document.getElementById(elementId);
+  el.innerHTML = "";
+
+  if (!items.length) {
+    el.innerHTML = "<li>No items found.</li>";
+    return;
+  }
+
+  items.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = typeof item === "string" ? item : item.text;
+    el.appendChild(li);
+  });
+}
+
+function setStatus(message) {
+  document.getElementById("status").innerText = message;
+}
