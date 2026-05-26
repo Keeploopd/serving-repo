@@ -89,6 +89,7 @@ let activeConversationId = null;
 let heartbeatInterval = null;
 let bannerInterval = null;
 let lastNotificationCount = null;
+let missionAnalysisInProgress = false;
 
 function stopMonitoring() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -389,7 +390,10 @@ async function loadMissionControl() {
 
     const data = await response.json();
 
-    if (data.status === "missing" || data.isStale === true) {
+    if (
+      (data.status === "missing" || data.isStale === true) &&
+      !missionAnalysisInProgress
+    ) {
       await refreshAnalysis();
       return;
     }
@@ -426,54 +430,44 @@ async function loadMissionControl() {
 }
 
 async function refreshAnalysis() {
+  if (missionAnalysisInProgress) return;
+
+  missionAnalysisInProgress = true;
+
   try {
-    setMissionStatus(
-      "Refreshing analysis...",
-      "amber"
-    );
+    setMissionStatus("Refreshing analysis...", "amber");
 
     const context = await getConversationContext();
     const token = await getValidToken();
+    const threadText = await getCurrentEmailText();
 
-    const threadText =
-      await getCurrentEmailText();
-
-    const response =
-      await fetch(
-        `${API_BASE}/api/thread/analyse`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-            Authorization:
-              `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            ...context,
-            threadText
-          })
-        }
-      );
+    const response = await fetch(`${API_BASE}/api/thread/analyse`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        ...context,
+        threadText
+      })
+    });
 
     if (!response.ok) {
-      throw new Error(
-        "Analysis failed"
-      );
+      throw new Error("Analysis failed");
     }
 
-    await loadMissionControl();
+    const data = await response.json();
+
+    renderMissionControl(data);
+
+    setMissionStatus("Mission Control ready", "green");
 
   } catch (err) {
-    console.error(
-      "Mission analysis failed:",
-      err
-    );
-
-    setMissionStatus(
-      "Mission analysis failed",
-      "red"
-    );
+    console.error("Mission analysis failed:", err);
+    setMissionStatus("Mission analysis failed", "red");
+  } finally {
+    missionAnalysisInProgress = false;
   }
 }
 
@@ -514,13 +508,6 @@ async function pollUntilReady(conversationId, token) {
 
 function renderMissionControl(data) {
   const state = data.state || {};
-
-  setMissionStatus(
-    data.status === "refreshing"
-      ? "Refreshing Mission Control..."
-      : "Mission Control ready",
-    data.status === "refreshing" ? "amber" : "green"
-  );
 
   renderParticipants(state.activeParticipants || []);
   renderMissionItems(state.missionControl || []);
