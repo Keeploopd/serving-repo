@@ -604,3 +604,8 @@ function renderList(elementId, items) {
 function setStatus(message) {
   document.getElementById("status").innerText = message;
 }
+
+function setMissionStatus(message) {
+  const el = document.getElementById("mission-status");
+  if (el) el.innerText = message;
+}
