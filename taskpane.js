@@ -336,8 +336,8 @@ async function getConversationContext() {
   const item = Office.context.mailbox.item;
 
   return {
-    conversationId: item.conversationId,
-    subject: item.subject,
+    conversationId: await getConversationKey(),
+    subject: getSubjectText(item),
     latestMessageSentAtUtc: new Date().toISOString()
   };
 }
