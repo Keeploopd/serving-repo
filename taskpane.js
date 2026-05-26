@@ -347,56 +347,125 @@ async function getAuthToken() {
 }
 
 async function loadMissionControl() {
-  setStatus("Loading Mission Control...");
+  try {
+    setMissionStatus(
+      "Loading Mission Control...",
+      "amber"
+    );
 
-  const context = await getConversationContext();
-  const token = await getValidToken();
+    const context = await getConversationContext();
+    const token = await getValidToken();
 
-  const url = new URL("/api/thread/state", window.location.origin);
-  url.searchParams.set("conversationId", context.conversationId);
-  url.searchParams.set("latestMessageSentAtUtc", context.latestMessageSentAtUtc);
+    const url = new URL(
+      "/api/thread/state",
+      window.location.origin
+    );
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`
+    url.searchParams.set(
+      "conversationId",
+      context.conversationId
+    );
+
+    url.searchParams.set(
+      "latestMessageSentAtUtc",
+      context.latestMessageSentAtUtc
+    );
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Mission Control request failed: ${response.status}`
+      );
     }
-  });
 
-  if (!response.ok) {
-    setStatus("Unable to load Mission Control.");
-    return;
-  }
+    const data = await response.json();
 
-  const data = await response.json();
+    renderMissionControl(data);
 
-  renderMissionControl(data);
+    setMissionStatus(
+      data.status === "refreshing"
+        ? "Refreshing Mission Control..."
+        : "Mission Control ready",
+      data.status === "refreshing"
+        ? "amber"
+        : "green"
+    );
 
-  if (data.status === "refreshing") {
-    pollUntilReady(context.conversationId, token);
+    if (data.status === "refreshing") {
+      pollUntilReady(
+        context.conversationId,
+        token
+      );
+    }
+
+  } catch (err) {
+    console.error(
+      "Mission Control load failed:",
+      err
+    );
+
+    setMissionStatus(
+      "Mission Control unavailable",
+      "red"
+    );
   }
 }
 
 async function refreshAnalysis() {
-  setStatus("Refreshing analysis...");
+  try {
+    setMissionStatus(
+      "Refreshing analysis...",
+      "amber"
+    );
 
-  const context = await getConversationContext();
-  const token = await getValidToken();
+    const context = await getConversationContext();
+    const token = await getValidToken();
 
-  const threadText = await getCurrentEmailText();
+    const threadText =
+      await getCurrentEmailText();
 
-  await fetch("/api/thread/analyse", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      ...context,
-      threadText
-    })
-  });
+    const response =
+      await fetch(
+        "/api/thread/analyse",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Authorization:
+              `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            ...context,
+            threadText
+          })
+        }
+      );
 
-  await loadMissionControl();
+    if (!response.ok) {
+      throw new Error(
+        "Analysis failed"
+      );
+    }
+
+    await loadMissionControl();
+
+  } catch (err) {
+    console.error(
+      "Mission analysis failed:",
+      err
+    );
+
+    setMissionStatus(
+      "Mission analysis failed",
+      "red"
+    );
+  }
 }
 
 async function getCurrentEmailText() {
@@ -439,7 +508,7 @@ function renderMissionControl(data) {
 
   setStatus(data.status === "refreshing"
     ? "Refreshing Mission Control..."
-    : "Mission Control ready");
+    : "Mission Control ready", "green");
 
   renderParticipants(state.activeParticipants || []);
   renderMissionItems(state.missionControl || []);
@@ -605,7 +674,19 @@ function setStatus(message) {
   document.getElementById("status").innerText = message;
 }
 
-function setMissionStatus(message) {
-  const el = document.getElementById("mission-status");
-  if (el) el.innerText = message;
+function setMissionStatus(message, colour = "amber") {
+  const status = document.getElementById("mission-status");
+  const dot = document.getElementById("mission-dot");
+
+  if (!status || !dot) return;
+
+  status.innerText = message;
+
+  dot.classList.remove(
+    "status-green",
+    "status-amber",
+    "status-red"
+  );
+
+  dot.classList.add(`status-${colour}`);
 }
