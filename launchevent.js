@@ -114,7 +114,7 @@ async function runCheck(event = null) {
   if (!token) {
     item.notificationMessages.replaceAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: "Open Co-Draft to sign in and enable co-drafter detection.",
+      message: "Open Keeploopd Panel to sign in and enable co-drafter detection.",
       icon: "Icon.16x16",
       persistent: false
     }, () => { if (event) event.completed(); });
@@ -127,7 +127,7 @@ async function runCheck(event = null) {
     console.error("Co-draft check failed:", err);
     item.notificationMessages.replaceAsync("codraftStatus", {
       type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-      message: "Co-drafter check failed. Please sign in.",
+      message: "Co-drafter check failed. Please open Keeploopd Panel to sign in.",
       icon: "Icon.16x16",
       persistent: false
     });
