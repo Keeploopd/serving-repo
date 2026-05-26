@@ -286,13 +286,24 @@ Office.onReady(async () => {
 
   signinButton.addEventListener("click", signInAndCallBackend);
 
+  const refreshButton = document.getElementById("refresh-analysis");
+  if (refreshButton) {
+    refreshButton.addEventListener("click", refreshAnalysis);
+  }
+
   const silentToken = await trySilentAuth();
 
   if (silentToken) {
     currentToken = silentToken;
-    try { localStorage.setItem("keeploopd_token", currentToken); } catch (e) {}
+
+    try {
+      localStorage.setItem("keeploopd_token", currentToken);
+    } catch (e) {}
+
     signinButton.style.display = "none";
+
     await init();
+    await loadMissionControl();
   } else {
     document.getElementById("status").textContent = "Sign in required.";
     signinButton.style.display = "block";
@@ -304,14 +315,19 @@ Office.onReady(async () => {
     } catch (err) {
       console.warn("Could not clear Co-Draft notification on unload", err);
     }
-    try { localStorage.removeItem("keeploopd_token"); } catch (e) {}
-  });
-  document
-    .getElementById("refresh-analysis")
-    .addEventListener("click", refreshAnalysis);
 
-  await loadMissionControl();
+    try {
+      localStorage.removeItem("keeploopd_token");
+    } catch (e) {}
+  });
 });
+
+async function getValidToken() {
+  if (currentToken) return currentToken;
+
+  currentToken = await getAuthToken();
+  return currentToken;
+}
 
 async function getConversationContext() {
   const item = Office.context.mailbox.item;
@@ -334,7 +350,7 @@ async function loadMissionControl() {
   setStatus("Loading Mission Control...");
 
   const context = await getConversationContext();
-  const token = await getAuthToken();
+  const token = await getValidToken();
 
   const url = new URL("/api/thread/state", window.location.origin);
   url.searchParams.set("conversationId", context.conversationId);
@@ -364,7 +380,7 @@ async function refreshAnalysis() {
   setStatus("Refreshing analysis...");
 
   const context = await getConversationContext();
-  const token = await getAuthToken();
+  const token = await getValidToken();
 
   const threadText = await getCurrentEmailText();
 
@@ -425,15 +441,148 @@ function renderMissionControl(data) {
     ? "Refreshing Mission Control..."
     : "Mission Control ready");
 
-  renderList("participants", state.activeParticipants || []);
-  renderList("mission-control", state.missionControl || []);
-  renderList("open-questions", state.openQuestions || []);
+  renderParticipants(state.activeParticipants || []);
+  renderMissionItems(state.missionControl || []);
+  renderQuestions(state.openQuestions || []);
+  renderReplyFocus(state.suggestedReplyFocus || {});
+  renderThreadHealth(state.threadHealth || {});
+}
 
-  document.getElementById("reply-focus").innerText =
-    state.suggestedReplyFocus?.reason || "No reply focus detected.";
+function renderMissionItems(items) {
+  const el = document.getElementById("mission-control-list");
+  el.innerHTML = "";
 
-  document.getElementById("thread-health").innerText =
-    state.threadHealth?.summary || "No thread health available.";
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state">No mission items yet.</div>`;
+    return;
+  }
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "task-row";
+
+    row.innerHTML = `
+      <div class="task-left">
+        <div class="task-icon-wrap">•</div>
+        <div class="task-text">${escapeHtml(item.text || item)}</div>
+      </div>
+      <div class="task-tag tag-blue">${escapeHtml(item.type || "item")}</div>
+    `;
+
+    el.appendChild(row);
+  });
+}
+
+function renderQuestions(questions) {
+  const el = document.getElementById("open-questions-list");
+  el.innerHTML = "";
+
+  if (!questions.length) {
+    el.innerHTML = `<div class="empty-state">No open questions detected.</div>`;
+    return;
+  }
+
+  questions.forEach((q) => {
+    const item = document.createElement("div");
+    item.className = "question-item";
+    item.innerHTML = `
+      <div class="question-bullet"></div>
+      <div>${escapeHtml(q)}</div>
+    `;
+    el.appendChild(item);
+  });
+}
+
+function renderReplyFocus(focus) {
+  document.getElementById("reply-focus-reason").innerText =
+    focus.reason || "No reply focus detected yet.";
+
+  const el = document.getElementById("reply-targets-list");
+  el.innerHTML = "";
+
+  const recipients = focus.primaryRecipients || [];
+
+  recipients.forEach((person) => {
+    const div = document.createElement("div");
+    div.className = "reply-target";
+
+    div.innerHTML = `
+      <div class="reply-avatar" style="background:#0f6cbd;">
+        ${getInitials(person)}
+      </div>
+      <div>
+        <div class="reply-target-name">${escapeHtml(person)}</div>
+        <div class="reply-target-role">Suggested recipient</div>
+      </div>
+    `;
+
+    el.appendChild(div);
+  });
+}
+
+function renderThreadHealth(health) {
+  document.getElementById("health-unresolved").innerText =
+    health.unresolvedCount ?? "0";
+
+  document.getElementById("health-decisions").innerText =
+    health.decisionsCount ?? "0";
+
+  document.getElementById("health-blockers").innerText =
+    health.blockersCount ?? "0";
+
+  document.getElementById("health-messages").innerText =
+    health.messageCount ?? "—";
+
+  document.getElementById("health-unresolved-status").innerText =
+    health.urgency || "Normal";
+}
+
+function renderParticipants(participants) {
+  const el = document.getElementById("participants-list");
+  el.innerHTML = "";
+
+  if (!participants.length) {
+    el.innerHTML = `<div class="empty-state">No active participants yet.</div>`;
+    return;
+  }
+
+  participants.forEach((p) => {
+    const name = typeof p === "string" ? p : p.name || p.email;
+
+    const div = document.createElement("div");
+    div.className = "participant";
+
+    div.innerHTML = `
+      <div class="avatar-wrap">
+        <div class="avatar" style="background:#0f6cbd;">${getInitials(name)}</div>
+        <div class="avatar-status" style="background:#16a34a;"></div>
+      </div>
+      <div class="participant-name">${escapeHtml(name)}</div>
+      <div class="participant-role">Active</div>
+    `;
+
+    el.appendChild(div);
+  });
+}
+
+function getInitials(value) {
+  if (!value) return "?";
+
+  return value
+    .split(/[ .@]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(x => x[0].toUpperCase())
+    .join("");
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function renderList(elementId, items) {
