@@ -73,6 +73,7 @@ async function signInAndCallBackend() {
           document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
           await init();
+          await loadMissionControl();
 
         } catch (err) {
           console.error("Taskpane token handling error", err);
@@ -371,6 +372,8 @@ async function loadMissionControl() {
       "latestMessageSentAtUtc",
       context.latestMessageSentAtUtc
     );
+    // debug in dev tools
+    console.log("MC fetching:", url.toString());
 
     const response = await fetch(url, {
       headers: {
@@ -385,6 +388,11 @@ async function loadMissionControl() {
     }
 
     const data = await response.json();
+
+    if (data.status === "missing" || data.isStale === true) {
+      await refreshAnalysis();
+      return;
+    }
 
     renderMissionControl(data);
 
@@ -507,9 +515,12 @@ async function pollUntilReady(conversationId, token) {
 function renderMissionControl(data) {
   const state = data.state || {};
 
-  setStatus(data.status === "refreshing"
-    ? "Refreshing Mission Control..."
-    : "Mission Control ready", "green");
+  setMissionStatus(
+    data.status === "refreshing"
+      ? "Refreshing Mission Control..."
+      : "Mission Control ready",
+    data.status === "refreshing" ? "amber" : "green"
+  );
 
   renderParticipants(state.activeParticipants || []);
   renderMissionItems(state.missionControl || []);
