@@ -15,6 +15,8 @@ const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
+const API_BASE = "https://api.keeploopd.com";
+
 let currentToken = null;
 let monitoringStarted = false;
 
@@ -357,8 +359,7 @@ async function loadMissionControl() {
     const token = await getValidToken();
 
     const url = new URL(
-      "/api/thread/state",
-      window.location.origin
+      "/api/thread/state", API_BASE
     );
 
     url.searchParams.set(
@@ -431,7 +432,7 @@ async function refreshAnalysis() {
 
     const response =
       await fetch(
-        "/api/thread/analyse",
+        `${API_BASE}/api/thread/analyse`,
         {
           method: "POST",
           headers: {
@@ -485,7 +486,7 @@ async function getCurrentEmailText() {
 
 async function pollUntilReady(conversationId, token) {
   const interval = setInterval(async () => {
-    const url = new URL("/api/thread/state", window.location.origin);
+    const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", conversationId);
 
     const response = await fetch(url, {
