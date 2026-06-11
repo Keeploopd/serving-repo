@@ -434,6 +434,7 @@ async function loadMissionControl() {
 }
 
 async function refreshAnalysis() {
+  console.trace("refreshAnalysis called");
   if (missionAnalysisInProgress) return;
 
   missionAnalysisInProgress = true;
