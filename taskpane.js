@@ -339,7 +339,8 @@ async function getConversationContext() {
   return {
     conversationId: await getConversationKey(),
     subject: getSubjectText(item),
-    latestMessageSentAtUtc: new Date().toISOString()
+    //latestMessageSentAtUtc: new Date().toISOString()
+    latestMessageSentAtUtc: "2026-01-01T00:00:00Z"
   };
 }
 
