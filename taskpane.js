@@ -345,6 +345,18 @@ async function getConversationContext() {
         item.dateTimeCreated?.toISOString()
         ?? new Date().toISOString()
   };
+      // debug
+    console.log(
+      "dateTimeCreated",
+      item.dateTimeCreated
+    );
+    
+    console.log(
+      "latestMessageSentAtUtc",
+      item.dateTimeCreated?.toISOString()
+        ?? new Date().toISOString()
+    );
+  // debug end
 }
 
 async function getAuthToken() {
