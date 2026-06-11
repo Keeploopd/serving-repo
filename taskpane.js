@@ -336,27 +336,37 @@ async function getValidToken() {
 async function getConversationContext() {
   const item = Office.context.mailbox.item;
 
+  const latestMessageSentAtUtc =
+    item.dateTimeCreated?.toISOString()
+    ?? new Date().toISOString();
+
+  // debug
+  console.log(
+    "dateTimeCreated:",
+    item.dateTimeCreated
+  );
+
+  console.log(
+    "latestMessageSentAtUtc:",
+    latestMessageSentAtUtc
+  );
+
+  console.log(
+    "itemId:",
+    item.itemId
+  );
+
+  console.log(
+    "conversationId:",
+    item.conversationId
+  );
+  // debug end
+
   return {
     conversationId: await getConversationKey(),
     subject: getSubjectText(item),
-    //latestMessageSentAtUtc: new Date().toISOString()
-    //latestMessageSentAtUtc: "2026-01-01T00:00:00Z"
-    latestMessageSentAtUtc:
-        item.dateTimeCreated?.toISOString()
-        ?? new Date().toISOString()
+    latestMessageSentAtUtc
   };
-      // debug
-    console.log(
-      "dateTimeCreated",
-      item.dateTimeCreated
-    );
-    
-    console.log(
-      "latestMessageSentAtUtc",
-      item.dateTimeCreated?.toISOString()
-        ?? new Date().toISOString()
-    );
-  // debug end
 }
 
 async function getAuthToken() {
@@ -405,6 +415,9 @@ async function loadMissionControl() {
     }
 
     const data = await response.json();
+    
+    // debug
+    console.log("THREAD_STATE response:", data);
 
     if (
       (data.status === "missing" || data.isStale === true) &&
