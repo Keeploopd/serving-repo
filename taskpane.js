@@ -459,6 +459,8 @@ async function refreshAnalysis() {
     setMissionStatus("Refreshing analysis...", "amber");
 
     const context = await getConversationContext();
+
+    
     const recipients = getRecipients();
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
