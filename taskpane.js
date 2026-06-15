@@ -635,7 +635,7 @@ function renderParticipants(participants) {
 
   participants.forEach((p) => {
     //const name = p.displayName || "Unknown";
-    const name = p.displayName || p.email || "Unknown";
+    const name = p.displayName || p.email;
 
     const isDropped = p.status === "dropped";
 
