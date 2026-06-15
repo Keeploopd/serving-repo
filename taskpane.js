@@ -437,6 +437,18 @@ async function loadMissionControl() {
   }
 }
 
+function getRecipients() {
+  const item = Office.context.mailbox.item;
+
+  const to = item.toRecipients || [];
+  const cc = item.ccRecipients || [];
+
+  return [...to, ...cc].map(r => ({
+    emailAddress: r.emailAddress,
+    displayName: r.displayName
+  }));
+}
+
 async function refreshAnalysis() {
   console.trace("refreshAnalysis called");
   if (missionAnalysisInProgress) return;
@@ -447,11 +459,12 @@ async function refreshAnalysis() {
     setMissionStatus("Refreshing analysis...", "amber");
 
     const context = await getConversationContext();
+    const context = await getConversationContext();
+    const recipients = getRecipients();
+
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
 
-    const recipients = context.recipients;
-    
     const participants = await Promise.all(
       recipients.map(async (r) => ({
         participant_hash: await hashEmail(r.emailAddress),
