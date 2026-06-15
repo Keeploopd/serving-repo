@@ -439,11 +439,15 @@ async function loadMissionControl() {
 
 function getRecipients() {
   const item = Office.context.mailbox.item;
-
   const to = item.toRecipients || [];
   const cc = item.ccRecipients || [];
+  const all = [...to, ...cc];
 
-  return [...to, ...cc].map(r => ({
+  if (!all.length) {
+    console.warn("getRecipients: no recipients found — are you in compose mode?");
+  }
+
+  return all.map(r => ({
     emailAddress: r.emailAddress,
     displayName: r.displayName
   }));
