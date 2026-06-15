@@ -449,6 +449,11 @@ async function refreshAnalysis() {
     const context = await getConversationContext();
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
+    
+    const participants = recipients.map(r => ({
+      participant_hash: await hashEmail(r.emailAddress),
+      display_name: r.displayName
+    }));
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
@@ -458,7 +463,8 @@ async function refreshAnalysis() {
       },
       body: JSON.stringify({
         ...context,
-        threadText
+        threadText,
+        participants
       })
     });
 
