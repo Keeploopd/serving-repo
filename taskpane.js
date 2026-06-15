@@ -336,21 +336,6 @@ async function getValidToken() {
 async function getConversationContext() {
   const item = Office.context.mailbox.item;
 
-  const latestMessageSentAtUtc =
-    item.dateTimeCreated?.toISOString()
-    ?? new Date().toISOString();
-
-  // debug
-  console.log(
-    "dateTimeCreated:",
-    item.dateTimeCreated
-  );
-
-  console.log(
-    "latestMessageSentAtUtc:",
-    latestMessageSentAtUtc
-  );
-
   console.log(
     "itemId:",
     item.itemId
@@ -360,12 +345,10 @@ async function getConversationContext() {
     "conversationId:",
     item.conversationId
   );
-  // debug end
 
   return {
     conversationId: await getConversationKey(),
-    subject: getSubjectText(item),
-    latestMessageSentAtUtc
+    subject: getSubjectText(item)
   };
 }
 
@@ -395,10 +378,6 @@ async function loadMissionControl() {
       context.conversationId
     );
 
-    url.searchParams.set(
-      "latestMessageSentAtUtc",
-      context.latestMessageSentAtUtc
-    );
     // debug in dev tools
     console.log("MC fetching:", url.toString());
 
