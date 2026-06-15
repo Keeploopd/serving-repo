@@ -614,28 +614,48 @@ function renderThreadHealth(health) {
     health.urgency || "Normal";
 }
 
+// participant rendering 
+function formatParticipantName(name) {
+  if (!name) return "";
+
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0];
+
+  return `${parts[0]} ${parts[1][0].toUpperCase()}`;
+}
+
 function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
-  if (!participants.length) {
-    el.innerHTML = `<div class="empty-state">No active participants yet.</div>`;
+  if (!participants?.length) {
+    el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
     return;
   }
 
   participants.forEach((p) => {
-    const name = typeof p === "string" ? p : p.name || p.email;
+    //const name = p.displayName || "Unknown";
+    const name = p.displayName || p.email || "Unknown";
+
+    const isDropped = p.status === "dropped";
 
     const div = document.createElement("div");
     div.className = "participant";
 
     div.innerHTML = `
       <div class="avatar-wrap">
-        <div class="avatar" style="background:#0f6cbd;">${getInitials(name)}</div>
-        <div class="avatar-status" style="background:#16a34a;"></div>
+        <div class="avatar" style="background:#0f6cbd;">
+          ${getInitials(name)}
+        </div>
+
+        <div class="avatar-status ${isDropped ? "dropped" : "active"}"></div>
       </div>
-      <div class="participant-name">${escapeHtml(name)}</div>
-      <div class="participant-role">Active</div>
+
+      <div class="participant-name">${escapeHtml(formatParticipantName(name))}</div>
+
+      <div class="participant-role">
+        ${isDropped ? "Dropped" : "Active"}
+      </div>
     `;
 
     el.appendChild(div);
