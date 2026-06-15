@@ -437,34 +437,36 @@ async function loadMissionControl() {
   }
 }
 
-function getRecipients() {
+async function getRecipients() {
   const item = Office.context.mailbox.item;
 
-  // Temporarily log the raw item to see what's available
-  console.log("item.from:", item.from);
-  console.log("item.to:", item.to);
-  console.log("item.cc:", item.cc);
-  console.log("item.toRecipients:", item.toRecipients);
-  console.log("item.ccRecipients:", item.ccRecipients);
-  console.log("Full item keys:", Object.keys(item));
-  
+  const results = await Promise.all([
+    new Promise(resolve => item.from.getAsync(r => resolve(r.value))),
+    new Promise(resolve => item.to.getAsync(r => resolve(r.value))),
+    new Promise(resolve => item.cc.getAsync(r => resolve(r.value))),
+  ]);
+
+  const [from, toList, ccList] = results;
+
   const recipients = [];
 
-  if (item.from) {
+  if (from) {
     recipients.push({
-      emailAddress: item.from.emailAddress,
-      displayName: item.from.displayName
+      emailAddress: from.emailAddress,
+      displayName: from.displayName
     });
   }
 
-  const toList = Array.isArray(item.to) ? item.to : item.to ? [item.to] : [];
-  const ccList = Array.isArray(item.cc) ? item.cc : item.cc ? [item.cc] : [];
+  const toArr = Array.isArray(toList) ? toList : toList ? [toList] : [];
+  const ccArr = Array.isArray(ccList) ? ccList : ccList ? [ccList] : [];
 
-  [...toList, ...ccList].forEach(r => {
-    recipients.push({
-      emailAddress: r.emailAddress,
-      displayName: r.displayName
-    });
+  [...toArr, ...ccArr].forEach(r => {
+    if (r.emailAddress) {
+      recipients.push({
+        emailAddress: r.emailAddress,
+        displayName: r.displayName || r.emailAddress
+      });
+    }
   });
 
   console.log("getRecipients result:", recipients);
@@ -482,7 +484,7 @@ async function refreshAnalysis() {
 
     const context = await getConversationContext();
 
-    
+    const recipients = await getRecipients();
     const recipients = getRecipients();
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
