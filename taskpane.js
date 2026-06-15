@@ -439,18 +439,30 @@ async function loadMissionControl() {
 
 function getRecipients() {
   const item = Office.context.mailbox.item;
-  const to = item.toRecipients || [];
-  const cc = item.ccRecipients || [];
-  const all = [...to, ...cc];
 
-  if (!all.length) {
-    console.warn("getRecipients: no recipients found — are you in compose mode?");
+  const recipients = [];
+
+  if (item.from) {
+    recipients.push({
+      emailAddress: item.from.emailAddress,
+      displayName: item.from.displayName
+    });
   }
 
-  return all.map(r => ({
+  const to = item.to || [];
+  to.forEach(r => recipients.push({
     emailAddress: r.emailAddress,
     displayName: r.displayName
   }));
+
+  const cc = item.cc || [];
+  cc.forEach(r => recipients.push({
+    emailAddress: r.emailAddress,
+    displayName: r.displayName
+  }));
+
+  console.log("getRecipients:", recipients);
+  return recipients;
 }
 
 async function refreshAnalysis() {
