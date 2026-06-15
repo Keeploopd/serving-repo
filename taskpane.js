@@ -541,7 +541,7 @@ async function pollUntilReady(conversationId, token) {
 function renderMissionControl(data) {
   const state = data.state || {};
 
-  renderParticipants(state.activeParticipants || []);
+  renderParticipants(data.participants || []);
   renderMissionItems(state.missionControl || []);
   renderQuestions(state.openQuestions || []);
   renderReplyFocus(state.suggestedReplyFocus || {});
@@ -658,7 +658,7 @@ function renderParticipants(participants) {
 
   participants.forEach((p) => {
     //const name = p.displayName || "Unknown";
-    const name = p.displayName || p.email || "Unknown";
+    const name = p.display_name || p.displayName || p.email || "Unknown";
 
     const isDropped = p.status === "dropped";
 
