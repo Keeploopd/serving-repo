@@ -439,7 +439,6 @@ async function loadMissionControl() {
 
 function getRecipients() {
   const item = Office.context.mailbox.item;
-
   const recipients = [];
 
   if (item.from) {
@@ -449,19 +448,17 @@ function getRecipients() {
     });
   }
 
-  const to = item.to || [];
-  to.forEach(r => recipients.push({
-    emailAddress: r.emailAddress,
-    displayName: r.displayName
-  }));
+  const toList = Array.isArray(item.to) ? item.to : item.to ? [item.to] : [];
+  const ccList = Array.isArray(item.cc) ? item.cc : item.cc ? [item.cc] : [];
 
-  const cc = item.cc || [];
-  cc.forEach(r => recipients.push({
-    emailAddress: r.emailAddress,
-    displayName: r.displayName
-  }));
+  [...toList, ...ccList].forEach(r => {
+    recipients.push({
+      emailAddress: r.emailAddress,
+      displayName: r.displayName
+    });
+  });
 
-  console.log("getRecipients:", recipients);
+  console.log("getRecipients result:", recipients);
   return recipients;
 }
 
