@@ -479,10 +479,12 @@ async function refreshAnalysis() {
     const threadText = await getCurrentEmailText();
 
     const participants = await Promise.all(
-      recipients.map(async (r) => ({
-        participant_hash: await hashEmail(r.emailAddress),
-        display_name: r.displayName
-      }))
+      recipients
+        .filter(r => r.emailAddress)
+        .map(async (r) => ({
+          participant_hash: await hashEmail(r.emailAddress),
+          display_name: r.displayName || r.emailAddress
+        }))
     );
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
