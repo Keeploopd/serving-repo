@@ -439,6 +439,15 @@ async function loadMissionControl() {
 
 function getRecipients() {
   const item = Office.context.mailbox.item;
+
+  // Temporarily log the raw item to see what's available
+  console.log("item.from:", item.from);
+  console.log("item.to:", item.to);
+  console.log("item.cc:", item.cc);
+  console.log("item.toRecipients:", item.toRecipients);
+  console.log("item.ccRecipients:", item.ccRecipients);
+  console.log("Full item keys:", Object.keys(item));
+  
   const recipients = [];
 
   if (item.from) {
