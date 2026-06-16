@@ -369,40 +369,53 @@ async function loadMissionControl() {
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
 
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!response.ok) throw new Error(`Mission Control request failed: ${response.status}`);
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`Failed: ${response.status}`);
 
     const data = await response.json();
     console.log("THREAD_STATE response:", data);
 
-    // Get current recipients to compare against cached participants
-    const currentRecipients = await getRecipients();
-    const currentHashes = await Promise.all(
-      currentRecipients
-        .filter(r => r.emailAddress)
-        .map(r => hashEmail(r.emailAddress))
-    );
-
-    const cachedHashes = (data.participants || []).map(p => p.participant_hash);
-
-    const participantMismatch =
-      currentHashes.length !== cachedHashes.length ||
-      currentHashes.some(h => !cachedHashes.includes(h));
-
-    if ((data.status === "missing" || data.isStale || participantMismatch) && !missionAnalysisInProgress) {
+    // Only trigger full analysis if missing or stale — not on participant mismatch
+    if ((data.status === "missing" || data.isStale === true) && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
     }
 
+    // Render what we have from cache first
     renderMissionControl(data);
     setMissionStatus("Mission Control ready", "green");
+
+    // Then separately update participants in background without re-running AI
+    updateParticipantsOnly(context.conversationId, token);
 
   } catch (err) {
     console.error("Mission Control load failed:", err);
     setMissionStatus("Mission Control unavailable", "red");
+  }
+}
+
+async function updateParticipantsOnly(conversationId, token) {
+  try {
+    const recipients = await getRecipients();
+    const participants = await Promise.all(
+      recipients
+        .filter(r => r.emailAddress)
+        .map(async r => ({
+          participant_hash: await hashEmail(r.emailAddress),
+          display_name: r.displayName || r.emailAddress
+        }))
+    );
+
+    await fetch(`${API_BASE}/api/thread/participants`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ conversationId, participants })
+    });
+  } catch (err) {
+    console.warn("Background participant update failed:", err);
   }
 }
 
