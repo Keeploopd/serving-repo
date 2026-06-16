@@ -365,16 +365,21 @@ async function loadMissionControl() {
 
     const context = await getConversationContext();
     const token = await getValidToken();
+    const rawEmail = Office.context.mailbox.userProfile.emailAddress;
+    const selfHash = await hashEmail(rawEmail);
 
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
+    url.searchParams.set("selfHash", selfHash);  // ← add this
 
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
     if (!response.ok) throw new Error(`Failed: ${response.status}`);
 
     const data = await response.json();
 
-    // Only auto-analyse if genuinely missing — never on mismatch
     if (data.status === "missing" && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
@@ -383,7 +388,6 @@ async function loadMissionControl() {
     renderMissionControl(data);
     setMissionStatus("Mission Control ready", "green");
 
-    // Always update participants in background without dropping anyone
     updateParticipantsOnly(context.conversationId, token);
 
   } catch (err) {
