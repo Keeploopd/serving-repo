@@ -485,7 +485,7 @@ async function refreshAnalysis() {
     const context = await getConversationContext();
 
     const recipients = await getRecipients();
-    const recipients = getRecipients();
+    //const recipients = getRecipients();
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
 
