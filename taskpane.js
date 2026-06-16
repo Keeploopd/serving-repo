@@ -440,34 +440,41 @@ async function loadMissionControl() {
 async function getRecipients() {
   const item = Office.context.mailbox.item;
 
-  const results = await Promise.all([
-    new Promise(resolve => item.from.getAsync(r => resolve(r.value))),
-    new Promise(resolve => item.to.getAsync(r => resolve(r.value))),
-    new Promise(resolve => item.cc.getAsync(r => resolve(r.value))),
-  ]);
+  const getAsync = (prop) => new Promise(resolve => {
+    prop.getAsync(r => {
+      console.log("getAsync result:", r.status, r.value, r.error);
+      resolve(r.status === Office.AsyncResultStatus.Succeeded ? r.value : null);
+    });
+  });
 
-  const [from, toList, ccList] = results;
+  const from = await getAsync(item.from);
+  const toList = await getAsync(item.to);
+  const ccList = await getAsync(item.cc);
+
+  console.log("from:", from, "to:", toList, "cc:", ccList);
 
   const recipients = [];
 
-  if (from) {
+  if (from?.emailAddress) {
     recipients.push({
       emailAddress: from.emailAddress,
-      displayName: from.displayName
+      displayName: from.displayName || from.emailAddress
     });
   }
 
   const toArr = Array.isArray(toList) ? toList : toList ? [toList] : [];
   const ccArr = Array.isArray(ccList) ? ccList : ccList ? [ccList] : [];
 
-  [...toArr, ...ccArr].forEach(r => {
-    if (r.emailAddress) {
-      recipients.push({
-        emailAddress: r.emailAddress,
-        displayName: r.displayName || r.emailAddress
-      });
-    }
-  });
+  [...toArr, ...ccArr]
+    .filter(r => r?.emailAddress)
+    .forEach(r => recipients.push({
+      emailAddress: r.emailAddress,
+      displayName: r.displayName || r.emailAddress
+    }));
+
+  console.log("getRecipients result:", recipients);
+  return recipients;
+}
 
   console.log("getRecipients result:", recipients);
   return recipients;
@@ -489,6 +496,8 @@ async function refreshAnalysis() {
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
 
+    console.log("recipients before hash:", recipients);
+
     const participants = await Promise.all(
       recipients
         .filter(r => r.emailAddress)
@@ -497,6 +506,8 @@ async function refreshAnalysis() {
           display_name: r.displayName || r.emailAddress
         }))
     );
+
+    console.log("participants to send:", participants);
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
