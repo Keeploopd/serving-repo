@@ -458,33 +458,29 @@ async function getRecipients() {
 
 
 async function refreshAnalysis() {
-  console.trace("refreshAnalysis called");
   if (missionAnalysisInProgress) return;
-
   missionAnalysisInProgress = true;
 
   try {
     setMissionStatus("Refreshing analysis...", "amber");
 
     const context = await getConversationContext();
-
     const recipients = await getRecipients();
-    //const recipients = getRecipients();
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
 
-    console.log("recipients before hash:", recipients);
+    const rawEmail = Office.context.mailbox.userProfile.emailAddress;
+    const selfHash = await hashEmail(rawEmail);
 
     const participants = await Promise.all(
       recipients
         .filter(r => r.emailAddress)
         .map(async (r) => ({
           participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress
+          display_name: r.displayName || r.emailAddress,
+          is_self: (await hashEmail(r.emailAddress)) === selfHash
         }))
     );
-
-    console.log("participants to send:", participants);
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
@@ -495,18 +491,15 @@ async function refreshAnalysis() {
       body: JSON.stringify({
         ...context,
         threadText,
-        participants
+        participants,
+        selfHash  // send separately too for convenience
       })
     });
 
-    if (!response.ok) {
-      throw new Error("Analysis failed");
-    }
+    if (!response.ok) throw new Error("Analysis failed");
 
     const data = await response.json();
-
     renderMissionControl(data);
-
     setMissionStatus("Mission Control ready", "green");
 
   } catch (err) {
