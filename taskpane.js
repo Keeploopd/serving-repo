@@ -575,11 +575,23 @@ async function pollUntilReady(conversationId, token) {
 function renderMissionControl(data) {
   const state = data.state || {};
 
-  renderParticipants(data.participants || []);
-  renderMissionItems(state.missionControl || []);
-  renderQuestions(state.openQuestions || []);
-  renderReplyFocus(state.suggestedReplyFocus || {});
-  renderThreadHealth(state.threadHealth || {});
+  console.log("renderMissionControl data:", data);
+  console.log("state:", state);
+
+  try { renderParticipants(data.participants || []); } 
+  catch(e) { console.error("renderParticipants failed:", e); }
+
+  try { renderMissionItems(state.missionControl || []); } 
+  catch(e) { console.error("renderMissionItems failed:", e); }
+
+  try { renderQuestions(state.openQuestions || []); } 
+  catch(e) { console.error("renderQuestions failed:", e); }
+
+  try { renderReplyFocus(state.suggestedReplyFocus || {}); } 
+  catch(e) { console.error("renderReplyFocus failed:", e); }
+
+  try { renderThreadHealth(state.threadHealth || {}); } 
+  catch(e) { console.error("renderThreadHealth failed:", e); }
 }
 
 function renderMissionItems(items) {
