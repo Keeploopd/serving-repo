@@ -373,19 +373,17 @@ async function loadMissionControl() {
     if (!response.ok) throw new Error(`Failed: ${response.status}`);
 
     const data = await response.json();
-    console.log("THREAD_STATE response:", data);
 
-    // Only trigger full analysis if missing or stale — not on participant mismatch
-    if ((data.status === "missing" || data.isStale === true) && !missionAnalysisInProgress) {
+    // Only auto-analyse if genuinely missing — never on mismatch
+    if (data.status === "missing" && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
     }
 
-    // Render what we have from cache first
     renderMissionControl(data);
     setMissionStatus("Mission Control ready", "green");
 
-    // Then separately update participants in background without re-running AI
+    // Always update participants in background without dropping anyone
     updateParticipantsOnly(context.conversationId, token);
 
   } catch (err) {
