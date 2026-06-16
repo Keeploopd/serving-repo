@@ -370,7 +370,7 @@ async function loadMissionControl() {
 
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
-    url.searchParams.set("selfHash", selfHash);  // ← add this
+    url.searchParams.set("selfHash", selfHash);
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
@@ -379,8 +379,12 @@ async function loadMissionControl() {
     if (!response.ok) throw new Error(`Failed: ${response.status}`);
 
     const data = await response.json();
+    console.log("THREAD_STATE response:", data);
 
-    if (data.status === "missing" && !missionAnalysisInProgress) {
+    const noParticipantsYet = !data.participants || data.participants.length === 0;
+
+    // Trigger analysis if: missing, OR no participants written for this user yet
+    if ((data.status === "missing" || noParticipantsYet) && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
     }
