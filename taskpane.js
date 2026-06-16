@@ -476,9 +476,6 @@ async function getRecipients() {
   return recipients;
 }
 
-  console.log("getRecipients result:", recipients);
-  return recipients;
-}
 
 async function refreshAnalysis() {
   console.trace("refreshAnalysis called");
