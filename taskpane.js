@@ -361,79 +361,48 @@ async function getAuthToken() {
 
 async function loadMissionControl() {
   try {
-    setMissionStatus(
-      "Loading Mission Control...",
-      "amber"
-    );
+    setMissionStatus("Loading Mission Control...", "amber");
 
     const context = await getConversationContext();
     const token = await getValidToken();
 
-    const url = new URL(
-      "/api/thread/state", API_BASE
-    );
-
-    url.searchParams.set(
-      "conversationId",
-      context.conversationId
-    );
-
-    // debug in dev tools
-    console.log("MC fetching:", url.toString());
+    const url = new URL("/api/thread/state", API_BASE);
+    url.searchParams.set("conversationId", context.conversationId);
 
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (!response.ok) {
-      throw new Error(
-        `Mission Control request failed: ${response.status}`
-      );
-    }
+    if (!response.ok) throw new Error(`Mission Control request failed: ${response.status}`);
 
     const data = await response.json();
-    
-    // debug
     console.log("THREAD_STATE response:", data);
 
-    if (
-      (data.status === "missing" || data.isStale === true) &&
-      !missionAnalysisInProgress
-    ) {
+    // Get current recipients to compare against cached participants
+    const currentRecipients = await getRecipients();
+    const currentHashes = await Promise.all(
+      currentRecipients
+        .filter(r => r.emailAddress)
+        .map(r => hashEmail(r.emailAddress))
+    );
+
+    const cachedHashes = (data.participants || []).map(p => p.participant_hash);
+
+    const participantMismatch =
+      currentHashes.length !== cachedHashes.length ||
+      currentHashes.some(h => !cachedHashes.includes(h));
+
+    if ((data.status === "missing" || data.isStale || participantMismatch) && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
     }
 
     renderMissionControl(data);
-
-    setMissionStatus(
-      data.status === "refreshing"
-        ? "Refreshing Mission Control..."
-        : "Mission Control ready",
-      data.status === "refreshing"
-        ? "amber"
-        : "green"
-    );
-
-    if (data.status === "refreshing") {
-      pollUntilReady(
-        context.conversationId,
-        token
-      );
-    }
+    setMissionStatus("Mission Control ready", "green");
 
   } catch (err) {
-    console.error(
-      "Mission Control load failed:",
-      err
-    );
-
-    setMissionStatus(
-      "Mission Control unavailable",
-      "red"
-    );
+    console.error("Mission Control load failed:", err);
+    setMissionStatus("Mission Control unavailable", "red");
   }
 }
 
@@ -686,8 +655,8 @@ function renderThreadHealth(health) {
 // participant rendering 
 function formatParticipantName(name) {
   if (!name) return "";
-
-  const parts = name.trim().split(" ");
+  
+  const parts = name.trim().split(" ").filter(Boolean);
   if (parts.length === 1) return parts[0];
 
   return `${parts[0]} ${parts[1][0].toUpperCase()}`;
