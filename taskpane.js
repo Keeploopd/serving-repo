@@ -365,32 +365,39 @@ async function loadMissionControl() {
 
     const context = await getConversationContext();
     const token = await getValidToken();
-    const rawEmail = Office.context.mailbox.userProfile.emailAddress;
-    const selfHash = await hashEmail(rawEmail);
 
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
-    url.searchParams.set("selfHash", selfHash);
+    // selfHash removed — no longer needed
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (!response.ok) throw new Error(`Failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Mission Control request failed: ${response.status}`);
+    }
 
     const data = await response.json();
     console.log("THREAD_STATE response:", data);
 
     const noParticipantsYet = !data.participants || data.participants.length === 0;
 
-    // Trigger analysis if: missing, OR no participants written for this user yet
     if ((data.status === "missing" || noParticipantsYet) && !missionAnalysisInProgress) {
       await refreshAnalysis();
       return;
     }
 
     renderMissionControl(data);
-    setMissionStatus("Mission Control ready", "green");
+
+    setMissionStatus(
+      data.status === "refreshing" ? "Refreshing Mission Control..." : "Mission Control ready",
+      data.status === "refreshing" ? "amber" : "green"
+    );
+
+    if (data.status === "refreshing") {
+      pollUntilReady(context.conversationId, token);
+    }
 
     updateParticipantsOnly(context.conversationId, token);
 
@@ -477,16 +484,13 @@ async function refreshAnalysis() {
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
 
-    const rawEmail = Office.context.mailbox.userProfile.emailAddress;
-    const selfHash = await hashEmail(rawEmail);
-
     const participants = await Promise.all(
       recipients
         .filter(r => r.emailAddress)
         .map(async (r) => ({
           participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress,
-          is_self: (await hashEmail(r.emailAddress)) === selfHash
+          display_name: r.displayName || r.emailAddress
+          // is_self removed — no longer needed
         }))
     );
 
@@ -499,8 +503,8 @@ async function refreshAnalysis() {
       body: JSON.stringify({
         ...context,
         threadText,
-        participants,
-        selfHash  // send separately too for convenience
+        participants
+        // selfHash removed — no longer needed
       })
     });
 
