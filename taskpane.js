@@ -683,11 +683,16 @@ function renderParticipants(participants) {
     return;
   }
 
-  participants.forEach((p) => {
-    //const name = p.displayName || "Unknown";
-    const name = p.display_name || p.displayName || p.email || "Unknown";
+  const statusConfig = {
+    active: { label: "Active", className: "active" },
+    dropped: { label: "Dropped", className: "dropped" },
+    additional: { label: "Additional", className: "additional" },
+    shared_out_of_thread: { label: "Shared out-of-thread", className: "shared" }
+  };
 
-    const isDropped = p.status === "dropped";
+  participants.forEach((p) => {
+    const name = p.display_name || p.email || "Unknown";
+    const config = statusConfig[p.display_status] || statusConfig.active;
 
     const div = document.createElement("div");
     div.className = "participant";
@@ -697,15 +702,10 @@ function renderParticipants(participants) {
         <div class="avatar" style="background:#0f6cbd;">
           ${getInitials(name)}
         </div>
-
-        <div class="avatar-status ${isDropped ? "dropped" : "active"}"></div>
+        <div class="avatar-status ${config.className}"></div>
       </div>
-
       <div class="participant-name">${escapeHtml(formatParticipantName(name))}</div>
-
-      <div class="participant-role">
-        ${isDropped ? "Dropped" : "Active"}
-      </div>
+      <div class="participant-role">${config.label}</div>
     `;
 
     el.appendChild(div);
