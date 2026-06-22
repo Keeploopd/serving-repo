@@ -359,6 +359,7 @@ async function getAuthToken() {
   });
 }
 
+
 async function loadMissionControl() {
   try {
     setMissionStatus("Loading Mission Control...", "amber");
@@ -368,15 +369,9 @@ async function loadMissionControl() {
 
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
-    // selfHash removed — no longer needed
 
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Mission Control request failed: ${response.status}`);
-    }
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`Mission Control request failed: ${response.status}`);
 
     const data = await response.json();
     console.log("THREAD_STATE response:", data);
@@ -389,15 +384,7 @@ async function loadMissionControl() {
     }
 
     renderMissionControl(data);
-
-    setMissionStatus(
-      data.status === "refreshing" ? "Refreshing Mission Control..." : "Mission Control ready",
-      data.status === "refreshing" ? "amber" : "green"
-    );
-
-    if (data.status === "refreshing") {
-      pollUntilReady(context.conversationId, token);
-    }
+    setMissionStatus("Mission Control ready", "green");
 
     updateParticipantsOnly(context.conversationId, token);
 
@@ -406,6 +393,7 @@ async function loadMissionControl() {
     setMissionStatus("Mission Control unavailable", "red");
   }
 }
+
 
 async function updateParticipantsOnly(conversationId, token) {
   try {
@@ -541,14 +529,11 @@ async function pollUntilReady(conversationId, token) {
   const interval = setInterval(async () => {
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", conversationId);
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const data = await response.json();
+
+    console.log("pollUntilReady status:", data.status);  // ← add this
+
     renderMissionControl(data);
 
     if (data.status === "ready") {
