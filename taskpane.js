@@ -664,14 +664,19 @@ function renderThreadHealth(health) {
     health.urgency || "Normal";
 }
 
-// participant rendering 
 function formatParticipantName(name) {
   if (!name) return "";
-  
+
+  if (name.includes("@")) {
+    const localPart = name.split("@")[0];
+    const parts = localPart.split(/[._-]/).filter(Boolean);
+    if (parts.length === 1) return parts[0];
+    return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
+  }
+
   const parts = name.trim().split(" ").filter(Boolean);
   if (parts.length === 1) return parts[0];
-
-  return `${parts[0]} ${parts[1][0].toUpperCase()}`;
+  return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
 }
 
 function renderParticipants(participants) {
@@ -693,10 +698,16 @@ function renderParticipants(participants) {
   participants.forEach((p) => {
     const name = p.display_name || p.email || "Unknown";
     const config = statusConfig[p.display_status] || statusConfig.active;
-
+    const isEmail = name.includes("@");
+  
     const div = document.createElement("div");
     div.className = "participant";
-
+  
+    // Add title for hover — shows full email if it's an email address
+    if (isEmail) {
+      div.title = name;
+    }
+  
     div.innerHTML = `
       <div class="avatar-wrap">
         <div class="avatar" style="background:#0f6cbd;">
@@ -707,7 +718,7 @@ function renderParticipants(participants) {
       <div class="participant-name">${escapeHtml(formatParticipantName(name))}</div>
       <div class="participant-role">${config.label}</div>
     `;
-
+  
     el.appendChild(div);
   });
 }
