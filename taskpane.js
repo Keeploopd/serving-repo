@@ -370,7 +370,10 @@ async function loadMissionControl() {
     const url = new URL("/api/thread/state", API_BASE);
     url.searchParams.set("conversationId", context.conversationId);
 
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
     if (!response.ok) throw new Error(`Mission Control request failed: ${response.status}`);
 
     const data = await response.json();
@@ -383,10 +386,18 @@ async function loadMissionControl() {
       return;
     }
 
-    renderMissionControl(data);
-    setMissionStatus("Mission Control ready", "green");
+    await updateParticipantsOnly(context.conversationId, token);
 
-    updateParticipantsOnly(context.conversationId, token);
+    const refreshedResponse = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!refreshedResponse.ok) throw new Error(`Refresh failed: ${refreshedResponse.status}`);
+
+    const refreshedData = await refreshedResponse.json();
+
+    renderMissionControl(refreshedData);
+    setMissionStatus("Mission Control ready", "green");
 
   } catch (err) {
     console.error("Mission Control load failed:", err);
