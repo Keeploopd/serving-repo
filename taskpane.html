@@ -554,6 +554,79 @@
       from { opacity: 0; transform: translateY(6px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+
+    /* ── Dark mode overrides ──────────────────────────── */
+    body.dark {
+      --bg:             #0f1117;
+      --surface:        #1a1d27;
+      --border:         #2d3142;
+      --text-primary:   #f1f3f7;
+      --text-secondary: #9aa0b4;
+      --text-muted:     #6b7280;
+      --accent:         #4d9de0;
+      --accent-soft:    #1a2a3d;
+      --accent-border:  #2a4a6e;
+      --green:          #34d399;
+      --green-soft:     #0d2c1f;
+      --amber:          #fbbf24;
+      --amber-soft:     #2c1f08;
+      --red:            #f87171;
+      --red-soft:       #2c1010;
+      --purple:         #a78bfa;
+      --purple-soft:    #1e1530;
+      --shadow:         0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+    }
+    
+    /* ── Dark mode toggle button ──────────────────────── */
+    #theme-toggle {
+      width: 32px;
+      height: 18px;
+      border-radius: 9px;
+      border: 1.5px solid var(--border);
+      background: var(--bg);
+      cursor: pointer;
+      position: relative;
+      transition: background .2s, border-color .2s;
+      flex-shrink: 0;
+      padding: 0;
+    }
+    
+    #theme-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: transform .2s, background .2s;
+    }
+    
+    body.dark #theme-toggle {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    
+    body.dark #theme-toggle::after {
+      transform: translateX(14px);
+      background: #fff;
+    }
+    
+    .theme-toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .theme-toggle-label {
+      font-size: 11px;
+      font-family: 'DM Mono', monospace;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    
   </style>
 </head>
 
@@ -574,7 +647,11 @@
         <div class="tp-subtitle">v1.0 · beta</div>
       </div>
     </div>
-    <button id="signin">Sign In</button>
+    <div class="theme-toggle-wrap">
+      <span class="theme-toggle-label" id="theme-label">Light</span>
+      <button id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button id="signin">Sign In</button>
+    </div>
   </div>
 
   <!-- ── Banner ─────────── -->
