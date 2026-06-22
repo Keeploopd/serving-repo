@@ -768,3 +768,22 @@ function setMissionStatus(message, colour = "amber") {
 
   dot.classList.add(`status-${colour}`);
 }
+
+
+// ── Dark mode toggle ──────────────────────────────────
+(function () {
+  const btn = document.getElementById('theme-toggle');
+  const label = document.getElementById('theme-label');
+
+  // Restore saved preference
+  if (localStorage.getItem('kl-theme') === 'dark') {
+    document.body.classList.add('dark');
+    label.textContent = 'Dark';
+  }
+
+  btn.addEventListener('click', () => {
+    const isDark = document.body.classList.toggle('dark');
+    label.textContent = isDark ? 'Dark' : 'Light';
+    localStorage.setItem('kl-theme', isDark ? 'dark' : 'light');
+  });
+})();
