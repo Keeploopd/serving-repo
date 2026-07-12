@@ -16,27 +16,54 @@ const apiRequest = {
   scopes: ["api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"]
 };
 
+const API_BASE = "https://api.keeploopd.com";
+
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+let msalInstancePromise = null;
+let cachedToken = null;
+
+function getMsal() {
+  if (!msalInstancePromise) {
+    msalInstancePromise = (async () => {
+      const instance = new msal.PublicClientApplication(msalConfig);
+      await instance.initialize();
+      return instance;
+    })();
+  }
+  return msalInstancePromise;
+}
+
+function tokenExpired(token) {
+  try {
+    const payloadB64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const { exp } = JSON.parse(atob(payloadB64));
+    return !exp || Date.now() / 1000 > exp - 60;
+  } catch (e) {
+    return true;
+  }
+}
 
 async function getToken() {
-  try {
-    const stored = localStorage.getItem("keeploopd_token");
-    if (stored) return stored;
-  } catch (e) {}
+  if (cachedToken && !tokenExpired(cachedToken)) return cachedToken;
 
   try {
-    const msalInstance = new msal.PublicClientApplication(msalConfig);
-    await msalInstance.initialize();
+    const msalInstance = await getMsal();
     const result = await msalInstance.ssoSilent({
       ...apiRequest,
       loginHint: Office.context.mailbox.userProfile.emailAddress
     });
-    return result.accessToken;
+    cachedToken = result.accessToken;
+    return cachedToken;
   } catch (e) {
     console.warn("ssoSilent fallback failed:", e);
     return null;
   }
 }
 
+
+// ── Conversation key ─────────────────────────────────────────────────────────
 
 async function sha256(value) {
   const encoded = new TextEncoder().encode(value);
@@ -45,11 +72,6 @@ async function sha256(value) {
     .map(b => b.toString(16).padStart(2, "0"))
     .join("");
 }
-
-async function hashEmail(email) {
-  return sha256(email.toLowerCase().trim());
-}
-
 
 async function getConversationKey(item) {
   const rawConversationId = item.conversationId || "";
@@ -69,27 +91,21 @@ async function getConversationKey(item) {
 }
 
 
+// ── Co-draft check ───────────────────────────────────────────────────────────
+
 async function runCoDraftCheck(item, token) {
   const conversationId = await getConversationKey(item);
-  const userId = await hashEmail(Office.context.mailbox.userProfile.emailAddress);
 
-  // Heartbeat
-  await fetch("https://api.keeploopd.com/heartbeat", {
+  const res = await fetch(`${API_BASE}/heartbeat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ conversationId, userId, timestamp: Date.now() })
+    body: JSON.stringify({ conversationId })
   });
 
-  // Fetch count
-  const res = await fetch(
-    `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (!res.ok) throw new Error(`active-drafters returned ${res.status}`);
+  if (!res.ok) throw new Error(`heartbeat returned ${res.status}`);
 
   const data = await res.json();
   const count = data.count ?? 0;
@@ -136,56 +152,33 @@ async function runCheck(event = null) {
   if (event) event.completed();
 }
 
-
 let pollingInterval = null;
 
 async function onNewMessageCompose(event) {
-  event.completed();
-  await runCheck();
+  try {
+    await runCheck();
+  } finally {
+    event.completed();
+  }
+}
+
+
+async function syncCoDrafters(event) {
+  if (pollingInterval) clearInterval(pollingInterval);
 
   pollingInterval = setInterval(async () => {
     await runCheck();
   }, 15000);
-
-  setTimeout(async () => {
-    const item = Office.context.mailbox.item;
-    try {
-      await item.notificationMessages.removeAsync("codraftStatus");
-      await item.notificationMessages.addAsync("codraftStatus", {
-        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-        message: "Co-drafter monitoring paused. Click Sync Co-Drafters to resume.",
-        icon: "Icon.16x16",
-        persistent: false
-      });
-    } catch (e) {}
-  }, 270000); 
 
   setTimeout(() => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
       pollingInterval = null;
     }
-  }, 300000); 
+  }, 300000);
+
+  await runCheck(event);
 }
-
-
-async function syncCoDrafters(event) {
-  if (pollingInterval) clearInterval(pollingInterval);
-    
-    pollingInterval = setInterval(async () => {
-      await runCheck();
-    }, 15000);
-  
-    setTimeout(() => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-    }, 300000); 
-  
-    await runCheck(event);
-  }
-
 
 
 Office.actions.associate("onNewMessageCompose", onNewMessageCompose);
