@@ -17,6 +17,7 @@ const apiRequest = {
 
 const API_BASE = "https://api.keeploopd.com";
 
+// Gate noisy logs that can contain email content / thread analysis (PII).
 const DEBUG = false;
 function dlog(...args) { if (DEBUG) console.log(...args); }
 
@@ -30,6 +31,9 @@ async function hashEmail(email) {
   return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Best-effort client-side expiry check (with 60s clock-skew margin) so we
+// never send a token we already know is dead. Signature validation stays
+// server-side, obviously.
 function tokenExpired(token) {
   try {
     const payloadB64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -38,6 +42,26 @@ function tokenExpired(token) {
   } catch (e) {
     return true;
   }
+}
+
+// ── Cross-runtime token bridge ───────────────────────────────────────────────
+// The Sync Co-Drafters button and the onNewMessageCompose event run in a
+// separate UI-less runtime (commands.html) where MSAL's silent flows are
+// unreliable; localStorage is the channel Outlook shares between the two
+// runtimes, so that runtime falls back to this bridge when Office SSO and
+// ssoSilent both fail. Accepted trade-off, mitigated: only unexpired tokens
+// are ever written, the reader deletes expired ones on sight, so at-rest
+// exposure is bounded by the token's own ~1h lifetime (vs. the previous
+// version, which stored tokens indefinitely with no expiry check). Delete
+// this once the add-in moves to a SharedRuntime or Nested App Auth.
+const BRIDGE_KEY = "keeploopd_token";
+
+function storeBridgeToken(token) {
+  try {
+    if (token && !tokenExpired(token)) {
+      localStorage.setItem(BRIDGE_KEY, token);
+    }
+  } catch (e) {}
 }
 
 async function signInAndCallBackend() {
@@ -80,7 +104,11 @@ async function signInAndCallBackend() {
             return;
           }
 
+          // Token is held in memory for this runtime; the expiry-checked
+          // bridge write below exists solely for the command runtime
+          // (Sync Co-Drafters / compose event) — see storeBridgeToken().
           currentToken = payload.accessToken;
+          storeBridgeToken(currentToken);
           document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
           await init();
@@ -132,6 +160,9 @@ function updateNotification(count) {
   });
 }
 
+// Single place that reacts to a drafter count, fed by heartbeat responses.
+// (Previously a separate /active-drafters poll ran every 5s in parallel with
+// the heartbeat — the count now rides back on the heartbeat itself.)
 function applyDrafterCount(count) {
   const banner = document.getElementById("banner");
 
@@ -209,6 +240,8 @@ async function init() {
       const token = await getValidToken();
       if (!token) return;
 
+      // NOTE: no userId in the body — the backend derives identity from the
+      // validated bearer token, so presence can't be spoofed client-side.
       const hb = await fetch(`${API_BASE}/heartbeat`, {
         method: "POST",
         headers: {
@@ -287,6 +320,7 @@ Office.onReady(async () => {
 
   if (silentToken) {
     currentToken = silentToken;
+    storeBridgeToken(currentToken);
 
     signinButton.style.display = "none";
 
@@ -309,6 +343,8 @@ Office.onReady(async () => {
 async function getValidToken() {
   if (currentToken && !tokenExpired(currentToken)) return currentToken;
 
+  // Refresh: MSAL silent first (uses its sessionStorage cache / refresh
+  // tokens), Office SSO as fallback.
   currentToken = await trySilentAuth();
   if (!currentToken) {
     try {
@@ -318,6 +354,7 @@ async function getValidToken() {
       currentToken = null;
     }
   }
+  storeBridgeToken(currentToken);
   return currentToken;
 }
 
@@ -367,6 +404,8 @@ async function loadMissionControl() {
       return;
     }
 
+    // POST /api/thread/participants now returns the refreshed participant
+    // list, so the second GET /api/thread/state round trip is gone.
     const updatedParticipants = await updateParticipantsOnly(context.conversationId, token);
 
     if (updatedParticipants) {
@@ -612,6 +651,9 @@ function renderReplyFocus(focus) {
     const div = document.createElement("div");
     div.className = "reply-target";
 
+    // getInitials output is escaped AND the function itself is hardened —
+    // this was previously an unescaped innerHTML sink fed by AI-influenced
+    // recipient strings.
     div.innerHTML = `
       <div class="reply-avatar" style="background:#0f6cbd;">
         ${escapeHtml(getInitials(person))}
@@ -682,6 +724,7 @@ function renderParticipants(participants) {
     const div = document.createElement("div");
     div.className = "participant";
 
+    // Add title for hover — shows full email if it's an email address
     if (isEmail) {
       div.title = name;
     }
@@ -702,7 +745,9 @@ function renderParticipants(participants) {
 }
 
 function getInitials(value) {
-
+  // Hardened: previously returned raw first characters (e.g. "<" from a
+  // display name like "<img ...") straight into innerHTML. Now only
+  // alphanumeric initials can come out; anything else collapses to "?".
   const initials = String(value || "")
     .split(/[ .@_-]/)
     .filter(Boolean)
@@ -761,10 +806,12 @@ function setMissionStatus(message, colour = "amber") {
 
 
 // ── Dark mode toggle ──────────────────────────────────
+// (localStorage is fine here — it's a UI preference, not a credential.)
 (function () {
   const btn = document.getElementById('theme-toggle');
   const label = document.getElementById('theme-label');
 
+  // Restore saved preference
   if (localStorage.getItem('kl-theme') === 'dark') {
     document.body.classList.add('dark');
     label.textContent = 'Dark';
