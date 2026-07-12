@@ -17,6 +17,9 @@ const apiRequest = {
 
 const API_BASE = "https://api.keeploopd.com";
 
+const DEBUG = false;
+function dlog(...args) { if (DEBUG) console.log(...args); }
+
 let currentToken = null;
 let monitoringStarted = false;
 
@@ -27,8 +30,18 @@ async function hashEmail(email) {
   return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+function tokenExpired(token) {
+  try {
+    const payloadB64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const { exp } = JSON.parse(atob(payloadB64));
+    return !exp || Date.now() / 1000 > exp - 60;
+  } catch (e) {
+    return true;
+  }
+}
+
 async function signInAndCallBackend() {
-  
+
   Office.context.ui.displayDialogAsync(
     "https://co-draft.keeploopd.com/auth.html",
     { height: 60, width: 40 },
@@ -53,14 +66,13 @@ async function signInAndCallBackend() {
             return;
           }
 
-          const response = await fetch("https://api.keeploopd.com/api/auth/test", {
+          const response = await fetch(`${API_BASE}/api/auth/test`, {
             headers: {
               Authorization: `Bearer ${payload.accessToken}`
             }
           });
 
-          const text = await response.text();
-          console.log("Backend response", response.status, text);
+          dlog("Backend auth test status", response.status);
 
           if (!response.ok) {
             document.getElementById("status").textContent =
@@ -69,7 +81,6 @@ async function signInAndCallBackend() {
           }
 
           currentToken = payload.accessToken;
-          try { localStorage.setItem("keeploopd_token", currentToken); } catch (e) {}
           document.getElementById("signin").style.display = "none";
           document.getElementById("status").textContent = "Authenticated successfully";
           await init();
@@ -87,16 +98,13 @@ async function signInAndCallBackend() {
 
 let activeConversationId = null;
 let heartbeatInterval = null;
-let bannerInterval = null;
 let lastNotificationCount = null;
 let missionAnalysisInProgress = false;
 
 function stopMonitoring() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
-  if (bannerInterval) clearInterval(bannerInterval);
 
   heartbeatInterval = null;
-  bannerInterval = null;
   monitoringStarted = false;
   lastNotificationCount = null;
 
@@ -116,13 +124,26 @@ function updateNotification(count) {
     if (count >= 1) {
       Office.context.mailbox.item.notificationMessages.addAsync("codraftStatus", {
         type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
-        //message: `${count} people are currently drafting replies`,
         message: `${count} ${count > 1 ? "people are" : "person is"} currently drafting a reply`,
         icon: "Icon.16x16",
         persistent: false
       });
     }
   });
+}
+
+function applyDrafterCount(count) {
+  const banner = document.getElementById("banner");
+
+  if (count >= 1) {
+    banner.style.display = "block";
+    banner.textContent = `${count} active drafter(s) detected`;
+  } else {
+    banner.style.display = "none";
+    banner.textContent = "";
+  }
+
+  updateNotification(count);
 }
 
 // Convo ID testing begin
@@ -168,11 +189,7 @@ async function init() {
     return;
   }
 
-  const item = Office.context.mailbox.item;
-  //const conversationId = item.conversationId.slice(-24);
   const conversationId = await getConversationKey();
-  const rawEmail = Office.context.mailbox.userProfile.emailAddress;
-  const userId = await hashEmail(rawEmail);
 
   if (activeConversationId && activeConversationId !== conversationId) {
     stopMonitoring();
@@ -189,64 +206,35 @@ async function init() {
 
   async function sendHeartbeat() {
     try {
-      const hb = await fetch("https://api.keeploopd.com/heartbeat", {
+      const token = await getValidToken();
+      if (!token) return;
+
+      const hb = await fetch(`${API_BASE}/heartbeat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${currentToken}`
+          "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          conversationId,
-          userId,
-          timestamp: Date.now()
-        })
+        body: JSON.stringify({ conversationId })
       });
 
-      console.log("heartbeat status", hb.status, await hb.text());
+      if (!hb.ok) {
+        console.error("heartbeat failed", hb.status);
+        return;
+      }
+
+      const data = await hb.json();
+      if (typeof data.count === "number") {
+        applyDrafterCount(data.count);
+      }
     } catch (err) {
       console.error("Heartbeat failed:", err);
     }
   }
 
-  async function updateBanner() {
-    try {
-      const res = await fetch(
-        `https://api.keeploopd.com/active-drafters?conversationId=${encodeURIComponent(conversationId)}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${currentToken}`
-          }
-        }
-      );
-
-      if (!res.ok) {
-        console.error("active-drafters failed", res.status, await res.text());
-        return;
-      }
-
-      const data = await res.json();
-      const banner = document.getElementById("banner");
-
-      if (data.count >= 1) {
-        banner.style.display = "block";
-        banner.textContent = `${data.count} active drafter(s) detected`;
-      } else {
-        banner.style.display = "none";
-        banner.textContent = "";
-      }
-
-      updateNotification(data.count);
-
-    } catch (err) {
-      console.error("Banner update failed:", err);
-    }
-  }
-
   await sendHeartbeat();
-  await updateBanner();
 
   heartbeatInterval = setInterval(sendHeartbeat, 10000);
-  bannerInterval = setInterval(updateBanner, 5000);
 }
 
 
@@ -300,10 +288,6 @@ Office.onReady(async () => {
   if (silentToken) {
     currentToken = silentToken;
 
-    try {
-      localStorage.setItem("keeploopd_token", currentToken);
-    } catch (e) {}
-
     signinButton.style.display = "none";
 
     await init();
@@ -319,32 +303,29 @@ Office.onReady(async () => {
     } catch (err) {
       console.warn("Could not clear Co-Draft notification on unload", err);
     }
-
-    try {
-      localStorage.removeItem("keeploopd_token");
-    } catch (e) {}
   });
 });
 
 async function getValidToken() {
-  if (currentToken) return currentToken;
+  if (currentToken && !tokenExpired(currentToken)) return currentToken;
 
-  currentToken = await getAuthToken();
+  currentToken = await trySilentAuth();
+  if (!currentToken) {
+    try {
+      currentToken = await getAuthToken();
+    } catch (e) {
+      console.warn("Office SSO fallback failed", e);
+      currentToken = null;
+    }
+  }
   return currentToken;
 }
 
 async function getConversationContext() {
   const item = Office.context.mailbox.item;
 
-  console.log(
-    "itemId:",
-    item.itemId
-  );
-
-  console.log(
-    "conversationId:",
-    item.conversationId
-  );
+  dlog("itemId:", item.itemId);
+  dlog("conversationId:", item.conversationId);
 
   return {
     conversationId: await getConversationKey(),
@@ -377,7 +358,7 @@ async function loadMissionControl() {
     if (!response.ok) throw new Error(`Mission Control request failed: ${response.status}`);
 
     const data = await response.json();
-    console.log("THREAD_STATE response:", data);
+    dlog("THREAD_STATE response:", data);
 
     const noParticipantsYet = !data.participants || data.participants.length === 0;
 
@@ -386,17 +367,13 @@ async function loadMissionControl() {
       return;
     }
 
-    await updateParticipantsOnly(context.conversationId, token);
+    const updatedParticipants = await updateParticipantsOnly(context.conversationId, token);
 
-    const refreshedResponse = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    if (updatedParticipants) {
+      data.participants = updatedParticipants;
+    }
 
-    if (!refreshedResponse.ok) throw new Error(`Refresh failed: ${refreshedResponse.status}`);
-
-    const refreshedData = await refreshedResponse.json();
-
-    renderMissionControl(refreshedData);
+    renderMissionControl(data);
     setMissionStatus("Mission Control ready", "green");
 
   } catch (err) {
@@ -418,7 +395,7 @@ async function updateParticipantsOnly(conversationId, token) {
         }))
     );
 
-    await fetch(`${API_BASE}/api/thread/participants`, {
+    const res = await fetch(`${API_BASE}/api/thread/participants`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -426,8 +403,14 @@ async function updateParticipantsOnly(conversationId, token) {
       },
       body: JSON.stringify({ conversationId, participants })
     });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    return data.participants || null;
   } catch (err) {
     console.warn("Background participant update failed:", err);
+    return null;
   }
 }
 
@@ -436,7 +419,6 @@ async function getRecipients() {
 
   const getAsync = (prop) => new Promise(resolve => {
     prop.getAsync(r => {
-      console.log("getAsync result:", r.status, r.value, r.error);
       resolve(r.status === Office.AsyncResultStatus.Succeeded ? r.value : null);
     });
   });
@@ -445,7 +427,7 @@ async function getRecipients() {
   const toList = await getAsync(item.to);
   const ccList = await getAsync(item.cc);
 
-  console.log("from:", from, "to:", toList, "cc:", ccList);
+  dlog("from:", from, "to:", toList, "cc:", ccList);
 
   const recipients = [];
 
@@ -466,7 +448,7 @@ async function getRecipients() {
       displayName: r.displayName || r.emailAddress
     }));
 
-  console.log("getRecipients result:", recipients);
+  dlog("getRecipients result:", recipients);
   return recipients;
 }
 
@@ -489,7 +471,6 @@ async function refreshAnalysis() {
         .map(async (r) => ({
           participant_hash: await hashEmail(r.emailAddress),
           display_name: r.displayName || r.emailAddress
-          // is_self removed — no longer needed
         }))
     );
 
@@ -503,7 +484,6 @@ async function refreshAnalysis() {
         ...context,
         threadText,
         participants
-        // selfHash removed — no longer needed
       })
     });
 
@@ -543,7 +523,7 @@ async function pollUntilReady(conversationId, token) {
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const data = await response.json();
 
-    console.log("pollUntilReady status:", data.status);  // ← add this
+    dlog("pollUntilReady status:", data.status);
 
     renderMissionControl(data);
 
@@ -556,22 +536,21 @@ async function pollUntilReady(conversationId, token) {
 function renderMissionControl(data) {
   const state = data.state || {};
 
-  console.log("renderMissionControl data:", data);
-  console.log("state:", state);
+  dlog("renderMissionControl data:", data);
 
-  try { renderParticipants(data.participants || []); } 
+  try { renderParticipants(data.participants || []); }
   catch(e) { console.error("renderParticipants failed:", e); }
 
-  try { renderMissionItems(state.missionControl || []); } 
+  try { renderMissionItems(state.missionControl || []); }
   catch(e) { console.error("renderMissionItems failed:", e); }
 
-  try { renderQuestions(state.openQuestions || []); } 
+  try { renderQuestions(state.openQuestions || []); }
   catch(e) { console.error("renderQuestions failed:", e); }
 
-  try { renderReplyFocus(state.suggestedReplyFocus || {}); } 
+  try { renderReplyFocus(state.suggestedReplyFocus || {}); }
   catch(e) { console.error("renderReplyFocus failed:", e); }
 
-  try { renderThreadHealth(state.threadHealth || {}); } 
+  try { renderThreadHealth(state.threadHealth || {}); }
   catch(e) { console.error("renderThreadHealth failed:", e); }
 }
 
@@ -635,7 +614,7 @@ function renderReplyFocus(focus) {
 
     div.innerHTML = `
       <div class="reply-avatar" style="background:#0f6cbd;">
-        ${getInitials(person)}
+        ${escapeHtml(getInitials(person))}
       </div>
       <div>
         <div class="reply-target-name">${escapeHtml(person)}</div>
@@ -699,39 +678,39 @@ function renderParticipants(participants) {
     const name = p.display_name || p.email || "Unknown";
     const config = statusConfig[p.display_status] || statusConfig.active;
     const isEmail = name.includes("@");
-  
+
     const div = document.createElement("div");
     div.className = "participant";
-  
-    // Add title for hover — shows full email if it's an email address
+
     if (isEmail) {
       div.title = name;
     }
-  
+
     div.innerHTML = `
       <div class="avatar-wrap">
         <div class="avatar" style="background:#0f6cbd;">
-          ${getInitials(name)}
+          ${escapeHtml(getInitials(name))}
         </div>
         <div class="avatar-status ${config.className}"></div>
       </div>
       <div class="participant-name">${escapeHtml(formatParticipantName(name))}</div>
       <div class="participant-role">${config.label}</div>
     `;
-  
+
     el.appendChild(div);
   });
 }
 
 function getInitials(value) {
-  if (!value) return "?";
 
-  return value
-    .split(/[ .@]/)
+  const initials = String(value || "")
+    .split(/[ .@_-]/)
     .filter(Boolean)
     .slice(0, 2)
     .map(x => x[0].toUpperCase())
     .join("");
+
+  return /^[A-Z0-9]{1,2}$/.test(initials) ? initials : "?";
 }
 
 function escapeHtml(value) {
@@ -786,7 +765,6 @@ function setMissionStatus(message, colour = "amber") {
   const btn = document.getElementById('theme-toggle');
   const label = document.getElementById('theme-label');
 
-  // Restore saved preference
   if (localStorage.getItem('kl-theme') === 'dark') {
     document.body.classList.add('dark');
     label.textContent = 'Dark';
