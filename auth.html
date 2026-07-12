@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
+  <!--
+    Version aligned with the rest of the add-in (was 2.37.0 here, 2.38.0
+    elsewhere). SECURITY NOTE: this page handles token acquisition — prefer
+    self-hosting msal-browser.min.js from co-draft.keeploopd.com (or adding an
+    SRI integrity attribute pinned to this exact version) so a CDN compromise
+    can't inject script into the auth flow. office.js must stay on Microsoft's
+    CDN per their hosting policy and is updated in place, so SRI doesn't apply
+    to it.
+  -->
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
@@ -17,51 +26,64 @@
       cacheLocation: "sessionStorage"
     }
   };
-  
+
   const scopes = [
     "api://co-draft.keeploopd.com/705cf97b-720b-4240-b6d0-02a6655300b2/access_as_user"
   ];
-  
+
   const msalInstance = new msal.PublicClientApplication(msalConfig);
-  
+
   function sendToTaskpane(payload) {
     Office.context.ui.messageParent(JSON.stringify(payload));
   }
-  
+
   Office.onReady(async () => {
     try {
       const result = await msalInstance.handleRedirectPromise();
-  
+
       if (result && result.accessToken) {
         sendToTaskpane({
           success: true,
-          accessToken: result.accessToken
+          accessToken: result.accessToken,
+          account: result.account
+            ? {
+                homeAccountId: result.account.homeAccountId,
+                username: result.account.username,
+                tenantId: result.account.tenantId
+              }
+            : null
         });
         return;
       }
-  
+
       const accounts = msalInstance.getAllAccounts();
-  
+
       if (accounts.length > 0) {
         const silentResult = await msalInstance.acquireTokenSilent({
           account: accounts[0],
           scopes
         });
-  
+
+        // BUGFIX: this branch previously read from `result.account`, but
+        // `result` is null here (that's why we fell through to the silent
+        // path) — it threw a TypeError and reported a failure even when
+        // silent token acquisition had succeeded.
         sendToTaskpane({
           success: true,
           accessToken: silentResult.accessToken,
-          account: {
-            homeAccountId: result.account.homeAccountId,
-            username: result.account.username,
-            tenantId: result.account.tenantId
-          }
+          account: silentResult.account
+            ? {
+                homeAccountId: silentResult.account.homeAccountId,
+                username: silentResult.account.username,
+                tenantId: silentResult.account.tenantId
+              }
+            : null
         });
         return;
       }
-  
+
       await msalInstance.loginRedirect({ scopes });
-  
+
     } catch (err) {
       sendToTaskpane({
         success: false,
