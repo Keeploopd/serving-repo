@@ -18,7 +18,7 @@ const apiRequest = {
 const API_BASE = "https://api.keeploopd.com";
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
-const DEBUG = true;
+const DEBUG = false;
 function dlog(...args) { if (DEBUG) console.log(...args); }
 
 let currentToken = null;
@@ -62,6 +62,41 @@ function storeBridgeToken(token) {
       localStorage.setItem(BRIDGE_KEY, token);
     }
   } catch (e) {}
+}
+
+// Timebox any auth call. In classic Outlook desktop, MSAL's hidden-iframe
+// flows (ssoSilent / acquireTokenSilent) can hang for 60s+ inside the
+// embedded webview before failing — which is what made the taskpane appear
+// to "take forever to load". Nothing silent is allowed to block startup for
+// longer than these budgets; on timeout we fall through to the next source
+// or show the sign-in button.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    )
+  ]);
+}
+
+// Office SSO without any prompts — native and fast in classic Outlook, so it
+// runs FIRST at startup; MSAL is the fallback (it shines in OWA).
+async function tryOfficeSsoQuiet() {
+  try {
+    if (typeof OfficeRuntime === "undefined" || !OfficeRuntime.auth) return null;
+    const token = await withTimeout(
+      OfficeRuntime.auth.getAccessToken({
+        allowSignInPrompt: false,
+        allowConsentPrompt: false
+      }),
+      6000,
+      "Office SSO"
+    );
+    return token || null;
+  } catch (e) {
+    console.warn("Quiet Office SSO unavailable:", e);
+    return null;
+  }
 }
 
 async function signInAndCallBackend() {
@@ -273,13 +308,17 @@ async function init() {
 
 async function trySilentAuth() {
   try {
-    await msalInstance.initialize();
+    await withTimeout(msalInstance.initialize(), 5000, "MSAL initialize");
 
     try {
-      const silentResult = await msalInstance.ssoSilent({
-        scopes: apiRequest.scopes,
-        loginHint: Office.context.mailbox.userProfile.emailAddress
-      });
+      const silentResult = await withTimeout(
+        msalInstance.ssoSilent({
+          scopes: apiRequest.scopes,
+          loginHint: Office.context.mailbox.userProfile.emailAddress
+        }),
+        8000,
+        "ssoSilent"
+      );
 
       return silentResult.accessToken;
     } catch (ssoErr) {
@@ -289,10 +328,14 @@ async function trySilentAuth() {
     const accounts = msalInstance.getAllAccounts();
     if (!accounts.length) return null;
 
-    const result = await msalInstance.acquireTokenSilent({
-      ...apiRequest,
-      account: accounts[0]
-    });
+    const result = await withTimeout(
+      msalInstance.acquireTokenSilent({
+        ...apiRequest,
+        account: accounts[0]
+      }),
+      8000,
+      "acquireTokenSilent"
+    );
 
     return result.accessToken;
   } catch (err) {
@@ -316,7 +359,17 @@ Office.onReady(async () => {
     refreshButton.addEventListener("click", refreshAnalysis);
   }
 
-  const silentToken = await trySilentAuth();
+  // Immediate feedback so the pane never looks frozen while auth resolves.
+  document.getElementById("status").textContent = "Checking sign-in status...";
+
+  // Classic Outlook fix: Office SSO first (native, fast in the desktop
+  // client), MSAL second (best in OWA). Every source is timeboxed, so the
+  // worst-case wait before showing the sign-in button is a few seconds
+  // instead of the webview hanging on MSAL's hidden iframe.
+  let silentToken = await tryOfficeSsoQuiet();
+  if (!silentToken) {
+    silentToken = await trySilentAuth();
+  }
 
   if (silentToken) {
     currentToken = silentToken;
@@ -343,9 +396,13 @@ Office.onReady(async () => {
 async function getValidToken() {
   if (currentToken && !tokenExpired(currentToken)) return currentToken;
 
-  // Refresh: MSAL silent first (uses its sessionStorage cache / refresh
-  // tokens), Office SSO as fallback.
-  currentToken = await trySilentAuth();
+  // Refresh order mirrors startup: quiet Office SSO (fast, esp. classic
+  // desktop) → MSAL silent (sessionStorage cache / refresh tokens) → Office
+  // SSO with prompts allowed as the last resort.
+  currentToken = await tryOfficeSsoQuiet();
+  if (!currentToken) {
+    currentToken = await trySilentAuth();
+  }
   if (!currentToken) {
     try {
       currentToken = await getAuthToken();
@@ -375,24 +432,6 @@ async function getAuthToken() {
     allowSignInPrompt: true,
     allowConsentPrompt: true
   });
-}
-
-
-
-function getMyDomain() {
-  return Office.context.mailbox.userProfile.emailAddress.split("@")[1]?.toLowerCase();
-}
-
-async function buildParticipantPayload(recipients) {
-  const myDomain = getMyDomain();
-  dlog("myDomain:", myDomain, "recipients:", recipients);
-  return Promise.all(
-    recipients.filter(r => r.emailAddress).map(async r => ({
-      participant_hash: await hashEmail(r.emailAddress),
-      display_name: r.displayName || r.emailAddress,
-      is_internal: r.emailAddress.split("@")[1]?.toLowerCase() === myDomain
-    }))
-  );
 }
 
 
@@ -443,7 +482,14 @@ async function loadMissionControl() {
 async function updateParticipantsOnly(conversationId, token) {
   try {
     const recipients = await getRecipients();
-    const participants = await buildParticipantPayload(recipients);
+    const participants = await Promise.all(
+      recipients
+        .filter(r => r.emailAddress)
+        .map(async r => ({
+          participant_hash: await hashEmail(r.emailAddress),
+          display_name: r.displayName || r.emailAddress
+        }))
+    );
 
     const res = await fetch(`${API_BASE}/api/thread/participants`, {
       method: "POST",
@@ -512,9 +558,17 @@ async function refreshAnalysis() {
 
     const context = await getConversationContext();
     const recipients = await getRecipients();
-    const participants = await buildParticipantPayload(recipients);
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
+
+    const participants = await Promise.all(
+      recipients
+        .filter(r => r.emailAddress)
+        .map(async (r) => ({
+          participant_hash: await hashEmail(r.emailAddress),
+          display_name: r.displayName || r.emailAddress
+        }))
+    );
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
@@ -625,9 +679,6 @@ function renderQuestions(questions) {
   const el = document.getElementById("open-questions-list");
   el.innerHTML = "";
 
-  const badge = document.getElementById("questions-badge");
-  if (badge) badge.textContent = questions.length ? String(questions.length) : "—";
-
   if (!questions.length) {
     el.innerHTML = `<div class="empty-state">No open questions detected.</div>`;
     return;
@@ -710,18 +761,6 @@ function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
-  const badge = document.getElementById("participants-badge");
-  if (badge) {
-    const internal = participants.filter(p => p.is_internal).length;
-    const external = participants.filter(p => !p.is_internal).length;
-    const internalEl = document.getElementById("internal-count");
-    const externalEl = document.getElementById("external-count");
-    if (internalEl && externalEl) {
-      internalEl.textContent = participants.length ? internal : "—";
-      externalEl.textContent = participants.length ? external : "—";
-    }
-  }
-
   if (!participants?.length) {
     el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
     return;
@@ -742,6 +781,7 @@ function renderParticipants(participants) {
     const div = document.createElement("div");
     div.className = "participant";
 
+    // Add title for hover — shows full email if it's an email address
     if (isEmail) {
       div.title = name;
     }
