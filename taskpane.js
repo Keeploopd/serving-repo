@@ -20,7 +20,7 @@ const API_BASE = "https://api.keeploopd.com";
 // Bump on every deploy. Logged unconditionally (tiny, non-PII) so a glance at
 // the console tells you whether classic Outlook is executing this build or a
 // stale copy from its Wef cache.
-const BUILD = "2026-07-13.1";
+const BUILD = "2026-07-13.2";
 console.log("Keeploopd taskpane build", BUILD);
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
@@ -217,6 +217,34 @@ function updateNotification(count) {
   });
 }
 
+// ── Live drafter identity ────────────────────────────────────────────────────
+// The heartbeat can (optionally) return `drafters`: an array of participant
+// hashes (sha256 of lowercased email — same scheme as buildParticipantPayload)
+// for everyone currently drafting in this conversation. When present, the
+// matching participants render as "Drafting" with a purple status dot.
+// Older backends that only return `count` keep working — the set just stays
+// empty and everyone falls back to their stored status.
+let currentDrafterHashes = new Set();
+let lastRenderedParticipants = [];
+
+function applyDrafters(hashes) {
+  const next = new Set(
+    (Array.isArray(hashes) ? hashes : []).filter(h => typeof h === "string")
+  );
+
+  const changed =
+    next.size !== currentDrafterHashes.size ||
+    [...next].some(h => !currentDrafterHashes.has(h));
+
+  currentDrafterHashes = next;
+
+  // Re-render with the last known participant list so the purple "Drafting"
+  // state appears/disappears between analysis refreshes, not only after one.
+  if (changed && lastRenderedParticipants.length) {
+    renderParticipants(lastRenderedParticipants);
+  }
+}
+
 // Single place that reacts to a drafter count, fed by heartbeat responses.
 // (Previously a separate /active-drafters poll ran every 5s in parallel with
 // the heartbeat — the count now rides back on the heartbeat itself.)
@@ -317,6 +345,7 @@ async function init() {
       if (typeof data.count === "number") {
         applyDrafterCount(data.count);
       }
+      applyDrafters(data.drafters); // no-op if the backend doesn't send it
     } catch (err) {
       console.error("Heartbeat failed:", err);
     }
@@ -712,12 +741,54 @@ function renderMissionControl(data) {
   catch(e) { console.error("renderThreadHealth failed:", e); }
 }
 
+// ── Collapsible lists ────────────────────────────────────────────────────────
+// Mission Control and Open Questions show at most MAX_VISIBLE_ITEMS by
+// default. "See all (N)" reveals the rest; "Collapse" hides them again. The
+// link disappears entirely when the list fits. Expanded/collapsed state
+// survives re-renders (heartbeats and analysis refreshes rebuild these lists).
+const MAX_VISIBLE_ITEMS = 4;
+const listExpandState = { mission: false, questions: false };
+
+function setupCollapsible(key, listEl, linkEl) {
+  if (!linkEl) return;
+
+  const total = listEl.children.length;
+
+  if (total <= MAX_VISIBLE_ITEMS) {
+    linkEl.style.display = "none";
+    listExpandState[key] = false;
+    return;
+  }
+
+  const apply = () => {
+    const expanded = listExpandState[key];
+    Array.from(listEl.children).forEach((child, i) => {
+      child.classList.toggle("overflow-hidden", !expanded && i >= MAX_VISIBLE_ITEMS);
+      // While collapsed, the visually-last row shouldn't draw a divider
+      // (the real :last-child is hidden below the fold).
+      child.classList.toggle("collapse-last", !expanded && i === MAX_VISIBLE_ITEMS - 1);
+    });
+    linkEl.textContent = expanded
+      ? "Collapse \u2039"
+      : `See all (${total}) \u203a`;
+  };
+
+  linkEl.style.display = "inline-flex";
+  linkEl.onclick = () => {
+    listExpandState[key] = !listExpandState[key];
+    apply();
+  };
+
+  apply();
+}
+
 function renderMissionItems(items) {
   const el = document.getElementById("mission-control-list");
   el.innerHTML = "";
 
   if (!items.length) {
     el.innerHTML = `<div class="empty-state">No mission items yet.</div>`;
+    setupCollapsible("mission", el, document.getElementById("mission-see-all"));
     return;
   }
 
@@ -735,6 +806,8 @@ function renderMissionItems(items) {
 
     el.appendChild(row);
   });
+
+  setupCollapsible("mission", el, document.getElementById("mission-see-all"));
 }
 
 function renderQuestions(questions) {
@@ -746,6 +819,7 @@ function renderQuestions(questions) {
 
   if (!questions.length) {
     el.innerHTML = `<div class="empty-state">No open questions detected.</div>`;
+    setupCollapsible("questions", el, document.getElementById("questions-see-all"));
     return;
   }
 
@@ -758,6 +832,8 @@ function renderQuestions(questions) {
     `;
     el.appendChild(item);
   });
+
+  setupCollapsible("questions", el, document.getElementById("questions-see-all"));
 }
 
 function renderReplyFocus(focus) {
@@ -826,6 +902,10 @@ function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
+  // Keep the raw server list so a drafter-set change from the heartbeat can
+  // re-render without waiting for the next /api/thread/state round trip.
+  lastRenderedParticipants = participants || [];
+
   // Overlay the best locally available is_internal before counting — server
   // values can be stale for rows written before the feature existed.
   participants = (participants || []).map(p => ({
@@ -851,23 +931,28 @@ function renderParticipants(participants) {
   }
 
   const statusConfig = {
-    active: { label: "Active", className: "active" },
+    active: { label: "Present", className: "active" },
     dropped: { label: "Dropped", className: "dropped" },
     additional: { label: "Additional", className: "additional" },
-    shared_out_of_thread: { label: "Shared out-of-thread", className: "shared" }
+    shared_out_of_thread: { label: "Shared out-of-thread", className: "shared" },
+    drafting: { label: "Drafting", className: "drafting" }
   };
 
   participants.forEach((p) => {
     const name = p.display_name || p.email || "Unknown";
-    const config = statusConfig[p.display_status] || statusConfig.active;
-    const isEmail = name.includes("@");
+
+    // Live "Drafting" state (from the heartbeat) outranks the stored status.
+    let config = statusConfig[p.display_status] || statusConfig.active;
+    if (p.participant_hash && currentDrafterHashes.has(p.participant_hash)) {
+      config = statusConfig.drafting;
+    }
 
     const div = document.createElement("div");
     div.className = "participant";
 
-    if (isEmail) {
-      div.title = name;
-    }
+    // Names are now ellipsis-truncated in a fixed 56px slot, so every
+    // participant gets the full name (or address) as a hover tooltip.
+    div.title = `${name} — ${config.label}`;
 
     div.innerHTML = `
       <div class="avatar-wrap">
