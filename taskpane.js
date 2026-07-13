@@ -441,16 +441,44 @@ function getMyDomain() {
   return Office.context.mailbox.userProfile.emailAddress.split("@")[1]?.toLowerCase();
 }
 
+// Session-local knowledge: hash -> is_internal for every address THIS client
+// has actually seen. Hashes are one-way, so this map (plus the display-name
+// fallback in resolveIsInternal) is the only way to correct stale stored
+// flags for participants visible in the current item.
+const localInternalByHash = new Map();
+
 async function buildParticipantPayload(recipients) {
   const myDomain = getMyDomain();
   dlog("myDomain:", myDomain, "recipients:", recipients);
   return Promise.all(
-    recipients.filter(r => r.emailAddress).map(async r => ({
-      participant_hash: await hashEmail(r.emailAddress),
-      display_name: r.displayName || r.emailAddress,
-      is_internal: r.emailAddress.split("@")[1]?.toLowerCase() === myDomain
-    }))
+    recipients.filter(r => r.emailAddress).map(async r => {
+      const participant_hash = await hashEmail(r.emailAddress);
+      const is_internal = r.emailAddress.split("@")[1]?.toLowerCase() === myDomain;
+      localInternalByHash.set(participant_hash, is_internal);
+      return {
+        participant_hash,
+        display_name: r.displayName || r.emailAddress,
+        is_internal
+      };
+    })
   );
+}
+
+// Best available truth for a server-returned participant, in order:
+//   1. We saw their address this session (authoritative for this client)
+//   2. Their stored display_name IS an email — derive from its domain
+//   3. Whatever the server stored (may be stale FALSE for rows written
+//      before the is_internal feature, until that person next appears in
+//      an updated client's from/to/cc)
+function resolveIsInternal(p) {
+  if (localInternalByHash.has(p.participant_hash)) {
+    return localInternalByHash.get(p.participant_hash);
+  }
+  const name = p.display_name || "";
+  if (name.includes("@")) {
+    return name.split("@")[1]?.toLowerCase().trim() === getMyDomain();
+  }
+  return !!p.is_internal;
 }
 
 
@@ -768,12 +796,15 @@ function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
+  // Overlay the best locally available is_internal before counting — server
+  // values can be stale for rows written before the feature existed.
+  participants = (participants || []).map(p => ({
+    ...p,
+    is_internal: resolveIsInternal(p)
+  }));
+
   const badge = document.getElementById("participants-badge");
   if (badge) {
-    // is_internal now round-trips through the backend (schemas.py Participant,
-    // thread_participants.is_internal column, and the SELECT in
-    // get_thread_participants) — without that it was silently dropped by the
-    // API and undefined here, making every participant count as external.
     const internal = participants.filter(p => p.is_internal).length;
     const external = participants.filter(p => !p.is_internal).length;
     const internalEl = document.getElementById("internal-count");
