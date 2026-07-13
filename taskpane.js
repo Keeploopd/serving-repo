@@ -18,7 +18,7 @@ const apiRequest = {
 const API_BASE = "https://api.keeploopd.com";
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
-const DEBUG = false;
+const DEBUG = true;
 function dlog(...args) { if (DEBUG) console.log(...args); }
 
 let currentToken = null;
@@ -385,6 +385,7 @@ function getMyDomain() {
 
 async function buildParticipantPayload(recipients) {
   const myDomain = getMyDomain();
+  dlog("myDomain:", myDomain, "recipients:", recipients);
   return Promise.all(
     recipients.filter(r => r.emailAddress).map(async r => ({
       participant_hash: await hashEmail(r.emailAddress),
