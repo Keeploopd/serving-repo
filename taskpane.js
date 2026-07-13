@@ -711,12 +711,15 @@ function renderParticipants(participants) {
 
   const badge = document.getElementById("participants-badge");
   if (badge) {
+    const internal = participants.filter(p => p.is_internal).length;
+    const external = participants.filter(p => !p.is_internal).length;
     const internalEl = document.getElementById("internal-count");
     const externalEl = document.getElementById("external-count");
     if (internalEl && externalEl) {
       internalEl.textContent = participants.length ? internal : "—";
       externalEl.textContent = participants.length ? external : "—";
     }
+  }
 
   if (!participants?.length) {
     el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
@@ -738,7 +741,6 @@ function renderParticipants(participants) {
     const div = document.createElement("div");
     div.className = "participant";
 
-    // Add title for hover — shows full email if it's an email address
     if (isEmail) {
       div.title = name;
     }
