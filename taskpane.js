@@ -17,10 +17,31 @@ const apiRequest = {
 
 const API_BASE = "https://api.keeploopd.com";
 
+// Bump on every deploy. Logged unconditionally (tiny, non-PII) so a glance at
+// the console tells you whether classic Outlook is executing this build or a
+// stale copy from its Wef cache.
+const BUILD = "2026-07-13.1";
+console.log("Keeploopd taskpane build", BUILD);
+
 // Gate noisy logs that can contain email content / thread analysis (PII).
 // REMINDER: set to false before shipping — currently true for dev.
 const DEBUG = true;
 function dlog(...args) { if (DEBUG) console.log(...args); }
+
+// Warm up MSAL immediately at script load, in parallel with everything else
+// (Office.onReady, the quiet Office SSO attempt). Previously initialize()
+// only started when trySilentAuth was reached, serialising its cost into the
+// fallback path on classic desktop. Never rejects — failure is recorded and
+// trySilentAuth bails out fast instead of hanging.
+const msalReady = (async () => {
+  try {
+    await msalInstance.initialize();
+    return true;
+  } catch (e) {
+    console.warn("MSAL initialize failed at warm-up:", e);
+    return false;
+  }
+})();
 
 let currentToken = null;
 let monitoringStarted = false;
@@ -309,7 +330,8 @@ async function init() {
 
 async function trySilentAuth() {
   try {
-    await withTimeout(msalInstance.initialize(), 5000, "MSAL initialize");
+    const initialized = await withTimeout(msalReady, 5000, "MSAL initialize");
+    if (!initialized) return null; // warm-up already failed — don't hang here
 
     try {
       const silentResult = await withTimeout(
@@ -363,13 +385,21 @@ Office.onReady(async () => {
   // Immediate feedback so the pane never looks frozen while auth resolves.
   document.getElementById("status").textContent = "Checking sign-in status...";
 
+  // Timing marks: with DEBUG on, these pinpoint exactly where classic
+  // Outlook spends its startup time (Office.onReady latency vs Office SSO
+  // vs MSAL vs first API call).
+  const t0 = performance.now();
+  dlog(`[perf] Office.onReady fired at ${t0.toFixed(0)}ms after script start`);
+
   // Classic Outlook fix: Office SSO first (native, fast in the desktop
   // client), MSAL second (best in OWA). Every source is timeboxed, so the
   // worst-case wait before showing the sign-in button is a few seconds
   // instead of the webview hanging on MSAL's hidden iframe.
   let silentToken = await tryOfficeSsoQuiet();
+  dlog(`[perf] quiet Office SSO ${silentToken ? "succeeded" : "failed"} at +${(performance.now() - t0).toFixed(0)}ms`);
   if (!silentToken) {
     silentToken = await trySilentAuth();
+    dlog(`[perf] MSAL silent ${silentToken ? "succeeded" : "failed"} at +${(performance.now() - t0).toFixed(0)}ms`);
   }
 
   if (silentToken) {
