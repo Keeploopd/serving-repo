@@ -278,11 +278,30 @@
     .card-body { padding: 10px 13px; }
 
     /* ── Participants card ────────────────────────── */
+    /* Single scrollable row: no wrapping, fixed-width slots, thin
+       horizontal scrollbar at the bottom of the card when the list
+       is wider than the pane. */
     .participants-list {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       align-items: flex-start;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 8px;              /* keeps scrollbar off the labels */
+      scrollbar-width: thin;                       /* Firefox */
+      scrollbar-color: var(--border) transparent;  /* Firefox */
+    }
+
+    /* WebKit (Outlook desktop webview / Edge / Chrome) */
+    .participants-list::-webkit-scrollbar { height: 6px; }
+    .participants-list::-webkit-scrollbar-track { background: transparent; }
+    .participants-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+    .participants-list::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
     }
 
     .participant {
@@ -290,7 +309,9 @@
       flex-direction: column;
       align-items: center;
       gap: 4px;
-      width: 52px;
+      flex: 0 0 56px;   /* fixed slot; never shrinks into a neighbour */
+      width: 56px;
+      min-width: 0;
     }
 
     .participant[title] {
@@ -339,18 +360,30 @@
       background-color: #ffb74d; /* amber */
     }
 
+    .avatar-status.drafting {
+      background: var(--purple); /* purple — actively drafting a reply */
+    }
+
     .participant-name {
       font-size: 10.5px;
       font-weight: 500;
       color: var(--text-primary);
       text-align: center;
       line-height: 1.2;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;   /* long names truncate, full name in tooltip */
     }
 
     .participant-role {
       font-size: 10px;
       color: var(--text-muted);
       text-align: center;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* ── Task rows ────────────────────────────────── */
@@ -423,6 +456,14 @@
     }
 
     .see-all-link:hover { text-decoration: underline; }
+
+    /* ── Collapsible lists (Mission Control / Open Questions) ── */
+    /* Items past the visible cap get this class while collapsed. */
+    .overflow-hidden { display: none !important; }
+
+    /* Visually-last row while collapsed shouldn't show a divider
+       (the real :last-child is hidden further down the list). */
+    .task-row.collapse-last { border-bottom: none; padding-bottom: 0; }
 
     /* ── Open questions ───────────────────────────── */
     .question-list { display: flex; flex-direction: column; gap: 6px; }
@@ -737,7 +778,7 @@
         <div class="task-list" id="mission-control-list">
           <div class="empty-state">No mission items yet.</div>
         </div>
-        <span class="see-all-link" id="mission-see-all">See all tasks &rsaquo;</span>
+        <span class="see-all-link" id="mission-see-all" style="display:none;">See all &rsaquo;</span>
       </div>
     </div>
 
@@ -760,7 +801,7 @@
         <div class="question-list" id="open-questions-list">
           <div class="empty-state">No open questions detected.</div>
         </div>
-        <span class="see-all-link" id="questions-see-all">See all &rsaquo;</span>
+        <span class="see-all-link" id="questions-see-all" style="display:none;">See all &rsaquo;</span>
       </div>
     </div>
 
