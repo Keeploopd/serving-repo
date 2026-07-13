@@ -18,7 +18,8 @@ const apiRequest = {
 const API_BASE = "https://api.keeploopd.com";
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
-const DEBUG = false;
+// REMINDER: set to false before shipping — currently true for dev.
+const DEBUG = true;
 function dlog(...args) { if (DEBUG) console.log(...args); }
 
 let currentToken = null;
@@ -435,6 +436,24 @@ async function getAuthToken() {
 }
 
 
+
+function getMyDomain() {
+  return Office.context.mailbox.userProfile.emailAddress.split("@")[1]?.toLowerCase();
+}
+
+async function buildParticipantPayload(recipients) {
+  const myDomain = getMyDomain();
+  dlog("myDomain:", myDomain, "recipients:", recipients);
+  return Promise.all(
+    recipients.filter(r => r.emailAddress).map(async r => ({
+      participant_hash: await hashEmail(r.emailAddress),
+      display_name: r.displayName || r.emailAddress,
+      is_internal: r.emailAddress.split("@")[1]?.toLowerCase() === myDomain
+    }))
+  );
+}
+
+
 async function loadMissionControl() {
   try {
     setMissionStatus("Loading Mission Control...", "amber");
@@ -482,14 +501,7 @@ async function loadMissionControl() {
 async function updateParticipantsOnly(conversationId, token) {
   try {
     const recipients = await getRecipients();
-    const participants = await Promise.all(
-      recipients
-        .filter(r => r.emailAddress)
-        .map(async r => ({
-          participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress
-        }))
-    );
+    const participants = await buildParticipantPayload(recipients);
 
     const res = await fetch(`${API_BASE}/api/thread/participants`, {
       method: "POST",
@@ -558,17 +570,9 @@ async function refreshAnalysis() {
 
     const context = await getConversationContext();
     const recipients = await getRecipients();
+    const participants = await buildParticipantPayload(recipients);
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
-
-    const participants = await Promise.all(
-      recipients
-        .filter(r => r.emailAddress)
-        .map(async (r) => ({
-          participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress
-        }))
-    );
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
@@ -679,6 +683,9 @@ function renderQuestions(questions) {
   const el = document.getElementById("open-questions-list");
   el.innerHTML = "";
 
+  const badge = document.getElementById("questions-badge");
+  if (badge) badge.textContent = questions.length ? String(questions.length) : "—";
+
   if (!questions.length) {
     el.innerHTML = `<div class="empty-state">No open questions detected.</div>`;
     return;
@@ -761,6 +768,22 @@ function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
+  const badge = document.getElementById("participants-badge");
+  if (badge) {
+    // is_internal now round-trips through the backend (schemas.py Participant,
+    // thread_participants.is_internal column, and the SELECT in
+    // get_thread_participants) — without that it was silently dropped by the
+    // API and undefined here, making every participant count as external.
+    const internal = participants.filter(p => p.is_internal).length;
+    const external = participants.filter(p => !p.is_internal).length;
+    const internalEl = document.getElementById("internal-count");
+    const externalEl = document.getElementById("external-count");
+    if (internalEl && externalEl) {
+      internalEl.textContent = participants.length ? internal : "—";
+      externalEl.textContent = participants.length ? external : "—";
+    }
+  }
+
   if (!participants?.length) {
     el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
     return;
@@ -781,7 +804,6 @@ function renderParticipants(participants) {
     const div = document.createElement("div");
     div.className = "participant";
 
-    // Add title for hover — shows full email if it's an email address
     if (isEmail) {
       div.title = name;
     }
