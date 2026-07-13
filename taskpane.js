@@ -20,7 +20,7 @@ const API_BASE = "https://api.keeploopd.com";
 // Bump on every deploy. Logged unconditionally (tiny, non-PII) so a glance at
 // the console tells you whether classic Outlook is executing this build or a
 // stale copy from its Wef cache.
-const BUILD = "2026-07-13.2";
+const BUILD = "2026-07-13.3";
 console.log("Keeploopd taskpane build", BUILD);
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
@@ -723,6 +723,10 @@ async function pollUntilReady(conversationId, token) {
 function renderMissionControl(data) {
   const state = data.state || {};
 
+  // Kept for the Thread Health detail panel — it renders decisions/blockers/
+  // questions out of the same state the cards were counted from.
+  lastThreadState = state;
+
   dlog("renderMissionControl data:", data);
 
   try { renderParticipants(data.participants || []); }
@@ -867,21 +871,214 @@ function renderReplyFocus(focus) {
 }
 
 function renderThreadHealth(health) {
+  // Decisions/blockers are derived from missionControl items — the AI schema
+  // has no decisionsCount/blockersCount fields, which is why these cards were
+  // stuck at 0. Deriving also guarantees the count always matches the items
+  // shown in the detail panel.
+  const mission = Array.isArray(lastThreadState?.missionControl)
+    ? lastThreadState.missionControl
+    : [];
+  const decisions = mission.filter(m => m && m.type === "decision");
+  const blockers = mission.filter(m => m && m.type === "blocker");
+
   document.getElementById("health-unresolved").innerText =
     health.unresolvedCount ?? "0";
 
   document.getElementById("health-decisions").innerText =
-    health.decisionsCount ?? "0";
+    String(decisions.length);
 
   document.getElementById("health-blockers").innerText =
-    health.blockersCount ?? "0";
+    String(blockers.length);
 
   document.getElementById("health-messages").innerText =
-    health.messageCount ?? "—";
+    health.messageCount ? String(health.messageCount) : "—";
 
   document.getElementById("health-unresolved-status").innerText =
     health.urgency || "Normal";
+
+  document.getElementById("health-decisions-status").innerText =
+    decisions.length ? "Recorded" : "None yet";
+
+  document.getElementById("health-blockers-status").innerText =
+    blockers.length ? "Attention" : "None";
+
+  // If a detail panel is open, refresh it against the new data.
+  renderHealthDetail();
 }
+
+
+// ── Thread Health detail panel ───────────────────────────────────────────────
+// Each health cell toggles a shared detail box under the grid. Clicking the
+// selected cell again collapses it. Content is rebuilt from lastThreadState
+// on every analysis refresh so an open panel never shows stale items.
+
+let lastThreadState = null;
+let selectedHealthCard = null;
+
+// Subject is fetched lazily (compose mode needs getAsync) and only for the
+// forwarded-thread hint in the Messages panel. Deliberately separate from
+// getSubjectText(), which feeds the conversation key and must not change.
+let detailSubjectPromise = null;
+
+function getDetailSubject() {
+  if (!detailSubjectPromise) {
+    detailSubjectPromise = new Promise((resolve) => {
+      try {
+        const item = Office.context.mailbox.item;
+        if (typeof item.subject === "string") return resolve(item.subject);
+        if (item.subject && item.subject.getAsync) {
+          item.subject.getAsync((r) =>
+            resolve(r.status === Office.AsyncResultStatus.Succeeded ? r.value || "" : "")
+          );
+          return;
+        }
+        resolve("");
+      } catch (e) {
+        resolve("");
+      }
+    });
+  }
+  return detailSubjectPromise;
+}
+
+// AI-extracted timestamps arrive as ISO-ish strings; render DD/MM/YYYY at
+// HH:MM, falling back to the raw string if it won't parse.
+function formatDetailDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  const date = d.toLocaleDateString("en-GB");
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `${date} at ${time}`;
+}
+
+function detailItem(text, suffix) {
+  const extra = suffix
+    ? ` <span class="health-detail-owner">— ${escapeHtml(suffix)}</span>`
+    : "";
+  return `
+    <div class="health-detail-item">
+      <span class="health-detail-bullet"></span>
+      <span>${escapeHtml(text)}${extra}</span>
+    </div>`;
+}
+
+function detailEmpty(text) {
+  return `<div class="health-detail-empty">${escapeHtml(text)}</div>`;
+}
+
+async function buildHealthDetail(kind) {
+  const state = lastThreadState || {};
+  const health = state.threadHealth || {};
+  const mission = Array.isArray(state.missionControl) ? state.missionControl : [];
+  const questions = Array.isArray(state.openQuestions) ? state.openQuestions : [];
+
+  if (kind === "unresolved") {
+    const waiting = mission.filter(m => m && m.type === "waiting_on");
+    let html = "";
+    if (health.summary) {
+      html += `<div class="health-detail-summary">${escapeHtml(health.summary)}</div>`;
+    }
+    questions.forEach(q => { html += detailItem(q, "open question"); });
+    waiting.forEach(m => {
+      html += detailItem(m.text || "", m.owner && m.owner !== "unknown" ? `waiting on ${m.owner}` : "waiting on");
+    });
+    if (!html) html = detailEmpty("Nothing unresolved detected in this thread.");
+    const urgency = health.urgency ? ` · ${health.urgency} urgency` : "";
+    return { title: `Unresolved items${urgency}`, html };
+  }
+
+  if (kind === "decisions") {
+    const decisions = mission.filter(m => m && m.type === "decision");
+    const html = decisions.length
+      ? decisions.map(m =>
+          detailItem(m.text || "", m.owner && m.owner !== "unknown" ? m.owner : "")
+        ).join("")
+      : detailEmpty("No decisions recorded in this thread yet.");
+    return { title: "Decisions", html };
+  }
+
+  if (kind === "blockers") {
+    const blockers = mission.filter(m => m && m.type === "blocker");
+    const html = blockers.length
+      ? blockers.map(m =>
+          detailItem(m.text || "", m.owner && m.owner !== "unknown" ? m.owner : "")
+        ).join("")
+      : detailEmpty("No blockers detected in this thread.");
+    return { title: "Blockers", html };
+  }
+
+  if (kind === "messages") {
+    const lines = [];
+
+    const subject = await getDetailSubject();
+    if (/^\s*(fw|fwd)\s*:/i.test(subject)) {
+      lines.push("This thread was forwarded to you.");
+    }
+
+    if (health.messageCount) {
+      lines.push(
+        `This thread contains ${health.messageCount} message${health.messageCount === 1 ? "" : "s"} so far.`
+      );
+    }
+
+    const began = formatDetailDate(health.firstMessageAt);
+    if (began) lines.push(`This email chain began on ${began}.`);
+
+    const last = formatDetailDate(health.lastMessageAt);
+    if (last) lines.push(`Last email sent on ${last}.`);
+
+    const html = lines.length
+      ? lines.map(l => detailItem(l)).join("")
+      : detailEmpty("No thread timeline available yet — refresh the analysis once the updated backend is deployed.");
+    return { title: "Thread timeline", html };
+  }
+
+  return { title: "", html: detailEmpty("Nothing to show.") };
+}
+
+async function renderHealthDetail() {
+  const panel = document.getElementById("health-detail");
+  if (!panel) return;
+
+  const cells = document.querySelectorAll(".health-cell[data-health]");
+  cells.forEach(c =>
+    c.classList.toggle("selected", c.dataset.health === selectedHealthCard)
+  );
+
+  if (!selectedHealthCard) {
+    panel.classList.remove("open");
+    return;
+  }
+
+  const kind = selectedHealthCard;
+  const { title, html } = await buildHealthDetail(kind);
+
+  // Selection may have changed while awaiting the subject fetch.
+  if (selectedHealthCard !== kind) return;
+
+  document.getElementById("health-detail-title").textContent = title;
+  document.getElementById("health-detail-body").innerHTML = html;
+  panel.classList.add("open");
+}
+
+function toggleHealthDetail(kind) {
+  selectedHealthCard = selectedHealthCard === kind ? null : kind;
+  renderHealthDetail();
+}
+
+// Wire up the health cells (click + keyboard).
+(function () {
+  document.querySelectorAll(".health-cell[data-health]").forEach((cell) => {
+    cell.addEventListener("click", () => toggleHealthDetail(cell.dataset.health));
+    cell.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleHealthDetail(cell.dataset.health);
+      }
+    });
+  });
+})();
 
 function formatParticipantName(name) {
   if (!name) return "";
