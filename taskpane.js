@@ -624,6 +624,9 @@ function renderQuestions(questions) {
   const el = document.getElementById("open-questions-list");
   el.innerHTML = "";
 
+  const badge = document.getElementById("questions-badge");
+  if (badge) badge.textContent = questions.length ? String(questions.length) : "—";
+
   if (!questions.length) {
     el.innerHTML = `<div class="empty-state">No open questions detected.</div>`;
     return;
@@ -706,10 +709,12 @@ function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
 
-  const internal = participants.filter(p => p.is_internal).length;
-  const external = participants.filter(p => !p.is_internal).length;
-  const badge = document.querySelector('.card:nth-child(1) .card-badge');
-  if (badge) badge.textContent = participants.length ? `${internal} · ${external}` : "— · —";
+  const badge = document.getElementById("participants-badge");
+  if (badge) {
+    const internal = participants.filter(p => p.is_internal).length;
+    const external = participants.filter(p => !p.is_internal).length;
+    badge.textContent = participants.length ? `${internal} · ${external}` : "— · —";
+  }
 
   if (!participants?.length) {
     el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
