@@ -19,25 +19,23 @@ const apiRequest = {
 const API_BASE = "https://api.keeploopd.com";
 
 const BRIDGE_KEY = "keeploopd_token";
-const POLL_MS = 15000;        // check every 15s
-const POLL_WINDOW_MS = 300000; // stop after 5 min and ask the user to re-sync
+const POLL_MS = 15000;         // check every 15s
+// 4.5 min: deliberately inside the host's ~5 min budget for both event-based
+// runtimes AND held-open function commands, so WE end the window (and show
+// the re-sync message) before the host tears the runtime down under us.
+const POLL_WINDOW_MS = 270000;
 
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 // Token sources, in order of preference:
 //   1. In-memory cache (expiry-checked)
-//   2. OfficeRuntime.auth.getAccessToken — Office SSO, works in command/event
-//      runtimes when WebApplicationInfo is configured in the manifest; the
-//      backend accepts the api:// audience these tokens carry. No storage,
-//      no prompts.
+//   2. OfficeRuntime.auth.getAccessToken — Office SSO; native and fast,
+//      works in command/event runtimes when WebApplicationInfo is in the
+//      manifest. The backend accepts the api:// audience these tokens carry.
 //   3. MSAL ssoSilent — works where the runtime supports hidden iframes (OWA).
-//   4. localStorage bridge written by the taskpane — LAST RESORT. This is the
-//      only channel Outlook guarantees between the taskpane and this runtime,
-//      which is why it existed originally. It is now expiry-checked on every
-//      read and expired tokens are deleted immediately, so the worst case is
-//      a short-lived (~1h) access token at rest, not a stale credential
-//      forever. When you move to a SharedRuntime or Nested App Auth, delete
-//      this bridge (source 4) and the taskpane's storeBridgeToken().
+//   4. localStorage bridge written by the taskpane — LAST RESORT, expiry-
+//      checked on every read, expired tokens deleted on sight. Delete this
+//      once the add-in moves to a SharedRuntime or Nested App Auth.
 
 let msalInstancePromise = null;
 let cachedToken = null;
@@ -63,13 +61,26 @@ function tokenExpired(token) {
   }
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    )
+  ]);
+}
+
 async function tryOfficeSso() {
   try {
     if (typeof OfficeRuntime === "undefined" || !OfficeRuntime.auth) return null;
-    const token = await OfficeRuntime.auth.getAccessToken({
-      allowSignInPrompt: false,   // never prompt from a UI-less runtime
-      allowConsentPrompt: false
-    });
+    const token = await withTimeout(
+      OfficeRuntime.auth.getAccessToken({
+        allowSignInPrompt: false,   // never prompt from a UI-less runtime
+        allowConsentPrompt: false
+      }),
+      6000,
+      "Office SSO"
+    );
     return token || null;
   } catch (e) {
     console.warn("Office SSO unavailable in this runtime:", e);
@@ -80,10 +91,14 @@ async function tryOfficeSso() {
 async function tryMsalSilent() {
   try {
     const msalInstance = await getMsal();
-    const result = await msalInstance.ssoSilent({
-      ...apiRequest,
-      loginHint: Office.context.mailbox.userProfile.emailAddress
-    });
+    const result = await withTimeout(
+      msalInstance.ssoSilent({
+        ...apiRequest,
+        loginHint: Office.context.mailbox.userProfile.emailAddress
+      }),
+      8000,
+      "ssoSilent"
+    );
     return result.accessToken;
   } catch (e) {
     console.warn("ssoSilent failed:", e);
@@ -196,15 +211,15 @@ async function runCoDraftCheck(item, token) {
 }
 
 
-async function runCheck(event = null) {
+async function runCheck() {
   const item = Office.context.mailbox.item;
   const token = await getToken();
 
   if (!token) {
-    // Stop the polling window — every further tick would fail identically.
-    stopPolling();
+    // Every further tick would fail identically — end the window (no resume
+    // message; the sign-in message below is the actionable one).
+    endPollingWindow(false);
     showInfoNotification("Open Keeploopd Panel to sign in, then click Sync Co-Drafters.");
-    if (event) event.completed();
     return;
   }
 
@@ -212,28 +227,42 @@ async function runCheck(event = null) {
     await runCoDraftCheck(item, token);
   } catch (err) {
     console.error("Co-draft check failed:", err);
-    cachedToken = null; // could be a revoked/rejected token — force re-acquire next tick
+    cachedToken = null; // possibly revoked/rejected — force re-acquire next tick
     showInfoNotification("Co-drafter check failed. Click Sync Co-Drafters to retry.");
   }
-
-  if (event) event.completed();
 }
 
 
 // ── Polling window ───────────────────────────────────────────────────────────
-// One managed window shared by both entry points. Fixes two issues in the
-// original implementation:
-//   1. Restarting (clicking Sync again) never cleared the previous window's
-//      setTimeouts, so a stale timeout could kill a fresh window early.
-//   2. The "paused" message was shown at 4.5 min while polling ran until
-//      5 min — the remaining ticks overwrote the message. Now the interval is
-//      stopped FIRST, then the re-sync message is shown.
-// NOTE: hosts may tear this runtime down after event.completed(); where that
-// happens polling ends early and the user still has the Sync button. For
-// guaranteed continuous monitoring, move it into the taskpane/SharedRuntime.
+// One managed window shared by both entry points.
+//
+// Two lifecycle tricks make this behave the same from the Sync button as it
+// does from the compose event:
+//
+//   1. HELD-OPEN EVENT: UI-less function-command runtimes are torn down
+//      almost immediately after event.completed() — which is why the Sync
+//      button previously fired only a single check. We now HOLD the event
+//      open for the duration of the window and complete it in
+//      endPollingWindow(). POLL_WINDOW_MS sits inside the host's ~5 min
+//      command budget so the host never times us out first.
+//
+//   2. TICK-DRIVEN END: the "monitoring paused" message is shown from an
+//      interval tick (elapsed-time check) rather than only a separate
+//      setTimeout — throttled/suspended runtimes can skip a lone timeout,
+//      which is why the re-sync message wasn't appearing reliably at the end
+//      of the compose window. A backup timeout remains as a belt-and-braces.
 
 let pollingInterval = null;
 let pollingEndTimeout = null;
+let pollingStartedAt = 0;
+let pendingEvent = null;
+
+function completePendingEvent() {
+  if (pendingEvent) {
+    try { pendingEvent.completed(); } catch (e) {}
+    pendingEvent = null;
+  }
+}
 
 function stopPolling() {
   if (pollingInterval) {
@@ -246,25 +275,37 @@ function stopPolling() {
   }
 }
 
-function startPollingWindow() {
+function endPollingWindow(showResumeMessage) {
   stopPolling();
+  if (showResumeMessage) {
+    showInfoNotification("Co-drafter monitoring paused. Click Sync Co-Drafters to resume.");
+  }
+  completePendingEvent();
+}
+
+function startPollingWindow(event = null) {
+  stopPolling();
+  completePendingEvent(); // release any previous held event before replacing it
+  pendingEvent = event;
+  pollingStartedAt = Date.now();
 
   pollingInterval = setInterval(() => {
+    if (Date.now() - pollingStartedAt >= POLL_WINDOW_MS) {
+      endPollingWindow(true); // message shown from a tick we know is firing
+      return;
+    }
     runCheck();
   }, POLL_MS);
 
-  pollingEndTimeout = setTimeout(() => {
-    stopPolling();
-    showInfoNotification("Co-drafter monitoring paused. Click Sync Co-Drafters to resume.");
-  }, POLL_WINDOW_MS);
+  pollingEndTimeout = setTimeout(() => endPollingWindow(true), POLL_WINDOW_MS + POLL_MS);
 }
 
 
 // ── Entry points ─────────────────────────────────────────────────────────────
 
 async function onNewMessageCompose(event) {
-  // Complete the launch event promptly, then poll for as long as the host
-  // keeps this runtime alive (bounded by POLL_WINDOW_MS).
+  // Launch events must complete promptly; the event-based runtime persists
+  // on its own (host policy, ~5 min) so nothing needs holding open here.
   event.completed();
   startPollingWindow();
   await runCheck();
@@ -272,8 +313,9 @@ async function onNewMessageCompose(event) {
 
 
 async function syncCoDrafters(event) {
-  startPollingWindow();
-  await runCheck(event); // immediate check; completes the button event
+  // Event is held open by the window manager — see lifecycle note above.
+  startPollingWindow(event);
+  await runCheck();
 }
 
 
