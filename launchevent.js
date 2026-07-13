@@ -18,6 +18,11 @@ const apiRequest = {
 
 const API_BASE = "https://api.keeploopd.com";
 
+// Bump with each deploy — confirms which build the command runtime executes
+// (classic Outlook caches this file too).
+const BUILD = "2026-07-13.1";
+console.log("Keeploopd launchevent build", BUILD);
+
 const BRIDGE_KEY = "keeploopd_token";
 const POLL_MS = 15000;         // check every 15s
 // 4.5 min: deliberately inside the host's ~5 min budget for both event-based
@@ -44,9 +49,14 @@ function getMsal() {
   if (!msalInstancePromise) {
     msalInstancePromise = (async () => {
       const instance = new msal.PublicClientApplication(msalConfig);
-      await instance.initialize();
+      // Timeboxed — this was the one un-budgeted await in the token chain.
+      await withTimeout(instance.initialize(), 4000, "MSAL initialize");
       return instance;
-    })();
+    })().catch((e) => {
+      console.warn("MSAL unavailable in command runtime:", e);
+      msalInstancePromise = null; // allow retry on a later tick
+      return null;
+    });
   }
   return msalInstancePromise;
 }
@@ -78,7 +88,7 @@ async function tryOfficeSso() {
         allowSignInPrompt: false,   // never prompt from a UI-less runtime
         allowConsentPrompt: false
       }),
-      6000,
+      4000,
       "Office SSO"
     );
     return token || null;
@@ -91,12 +101,13 @@ async function tryOfficeSso() {
 async function tryMsalSilent() {
   try {
     const msalInstance = await getMsal();
+    if (!msalInstance) return null;
     const result = await withTimeout(
       msalInstance.ssoSilent({
         ...apiRequest,
         loginHint: Office.context.mailbox.userProfile.emailAddress
       }),
-      8000,
+      5000,
       "ssoSilent"
     );
     return result.accessToken;
