@@ -378,6 +378,23 @@ async function getAuthToken() {
 }
 
 
+
+function getMyDomain() {
+  return Office.context.mailbox.userProfile.emailAddress.split("@")[1]?.toLowerCase();
+}
+
+async function buildParticipantPayload(recipients) {
+  const myDomain = getMyDomain();
+  return Promise.all(
+    recipients.filter(r => r.emailAddress).map(async r => ({
+      participant_hash: await hashEmail(r.emailAddress),
+      display_name: r.displayName || r.emailAddress,
+      is_internal: r.emailAddress.split("@")[1]?.toLowerCase() === myDomain
+    }))
+  );
+}
+
+
 async function loadMissionControl() {
   try {
     setMissionStatus("Loading Mission Control...", "amber");
@@ -425,14 +442,7 @@ async function loadMissionControl() {
 async function updateParticipantsOnly(conversationId, token) {
   try {
     const recipients = await getRecipients();
-    const participants = await Promise.all(
-      recipients
-        .filter(r => r.emailAddress)
-        .map(async r => ({
-          participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress
-        }))
-    );
+    const participants = await buildParticipantPayload(recipients);
 
     const res = await fetch(`${API_BASE}/api/thread/participants`, {
       method: "POST",
@@ -501,17 +511,9 @@ async function refreshAnalysis() {
 
     const context = await getConversationContext();
     const recipients = await getRecipients();
+    const participants = await buildParticipantPayload(recipients);
     const token = await getValidToken();
     const threadText = await getCurrentEmailText();
-
-    const participants = await Promise.all(
-      recipients
-        .filter(r => r.emailAddress)
-        .map(async (r) => ({
-          participant_hash: await hashEmail(r.emailAddress),
-          display_name: r.displayName || r.emailAddress
-        }))
-    );
 
     const response = await fetch(`${API_BASE}/api/thread/analyse`, {
       method: "POST",
@@ -703,6 +705,11 @@ function formatParticipantName(name) {
 function renderParticipants(participants) {
   const el = document.getElementById("participants-list");
   el.innerHTML = "";
+
+  const internal = participants.filter(p => p.is_internal).length;
+  const external = participants.filter(p => !p.is_internal).length;
+  const badge = document.querySelector('.card:nth-child(1) .card-badge');
+  if (badge) badge.textContent = participants.length ? `${internal} · ${external}` : "— · —";
 
   if (!participants?.length) {
     el.innerHTML = `<div class="empty-state">No participants yet.</div>`;
