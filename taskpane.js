@@ -25,7 +25,7 @@ console.log("Keeploopd taskpane build", BUILD);
 
 // Gate noisy logs that can contain email content / thread analysis (PII).
 // REMINDER: set to false before shipping — currently true for dev.
-const DEBUG = true;
+const DEBUG = false;
 function dlog(...args) { if (DEBUG) console.log(...args); }
 
 // Warm up MSAL immediately at script load, in parallel with everything else
