@@ -4,7 +4,7 @@ Office.initialize = function () {};
 const msalConfig = {
   auth: {
     clientId: "705cf97b-720b-4240-b6d0-02a6655300b2",
-    authority: "https://login.microsoftonline.com/5904ae0b-47e9-4b06-843e-60769342a32b",
+    authority: "https://login.microsoftonline.com/organizations",
     redirectUri: "https://co-draft.keeploopd.com/commands.html"
   },
   cache: {
